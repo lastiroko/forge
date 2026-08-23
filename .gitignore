@@ -1,2 +1,4 @@
 .agent/
 .aider*
+node_modules/
+dist/
