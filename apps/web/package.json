@@ -2,6 +2,21 @@
   "name": "@forge/web",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
-  "main": "src/index.ts"
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "tsx --test src/app/*.test.ts"
+  },
+  "dependencies": {
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "tsx": "^4.16.2"
+  }
 }
