@@ -6,10 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "tsx --test src/app/*.test.ts src/modules/kit-generator/*.test.ts"
+    "test": "tsx --test src/app/*.test.ts src/modules/kit-generator/*.test.ts src/modules/catalogue/*.test.ts"
   },
   "dependencies": {
+    "@forge/db": "0.0.0",
     "@forge/shared": "0.0.0",
+    "drizzle-orm": "^0.33.0",
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
