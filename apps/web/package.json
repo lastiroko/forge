@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "tsx --test src/app/*.test.ts"
+    "test": "tsx --test src/app/*.test.ts src/modules/kit-generator/*.test.ts"
   },
   "dependencies": {
     "@forge/shared": "0.0.0",

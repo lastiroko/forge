@@ -1,0 +1,9 @@
+from fastapi import APIRouter
+
+router = APIRouter()
+
+
+@router.{{METHOD}}("{{PATH}}")
+def {{OPERATION_ID}}():
+    """TODO: implement {{OPERATION_ID}}."""
+    raise NotImplementedError
