@@ -17,5 +17,6 @@ COPY packages/shared ./packages/shared
 USER node
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV DATABASE_URL=postgres://forge:forge@localhost:5432/forge
 EXPOSE 3000
 CMD ["node_modules/.bin/tsx", "apps/worker/src/server.ts"]
