@@ -3,5 +3,21 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "src/index.ts"
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "tsx --test src/*.test.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@forge/shared": "0.0.0",
+    "drizzle-orm": "^0.33.0",
+    "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/pg": "^8.11.6",
+    "drizzle-kit": "^0.24.2",
+    "tsx": "^4.16.2"
+  }
 }
