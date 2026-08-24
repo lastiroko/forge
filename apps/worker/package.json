@@ -6,7 +6,7 @@
   "main": "src/server.ts",
   "scripts": {
     "start": "tsx src/server.ts",
-    "test": "tsx --test src"
+    "test": "tsx --test 'src/**/*.test.ts'"
   },
   "dependencies": {
     "@forge/shared": "0.0.0",
