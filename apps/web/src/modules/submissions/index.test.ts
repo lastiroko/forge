@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { eq, inArray } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
-import { submit, RateLimitExceededError } from './index.js';
+import { submit, getSubmission, RateLimitExceededError } from './index.js';
 
 const { challenges, challengeVersions, enrollments, submissions } = schema;
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
@@ -12,8 +12,13 @@ test('rejects a sixth submission for the same member and challenge within the ro
   const { db, pool } = createDbClient(databaseUrl);
   const userId = randomUUID();
   const stackId = randomUUID();
-  const insertedSubmissionIds = [];
-  let enrollmentAId, enrollmentBId, versionAId, versionBId, challengeAId, challengeBId;
+  const insertedSubmissionIds: string[] = [];
+  let enrollmentAId: string | undefined;
+  let enrollmentBId: string | undefined;
+  let versionAId: string | undefined;
+  let versionBId: string | undefined;
+  let challengeAId: string | undefined;
+  let challengeBId: string | undefined;
 
   try {
     const [challengeA] = await db.insert(challenges).values({ title: 'Challenge A', level: 'junior' }).returning();
@@ -51,7 +56,7 @@ test('rejects a sixth submission for the same member and challenge within the ro
     }
 
     await assert.rejects(
-      () => submit(enrollmentAId, 'sha-6', databaseUrl),
+      () => submit(enrollmentAId!, 'sha-6', databaseUrl),
       (error) => {
         assert.ok(error instanceof RateLimitExceededError);
         assert.ok(error.retryAfterSeconds > 0);
@@ -74,6 +79,48 @@ test('rejects a sixth submission for the same member and challenge within the ro
     if (versionBId) await db.delete(challengeVersions).where(eq(challengeVersions.id, versionBId));
     if (challengeAId) await db.delete(challenges).where(eq(challenges.id, challengeAId));
     if (challengeBId) await db.delete(challenges).where(eq(challenges.id, challengeBId));
+    await pool.end();
+  }
+});
+
+test('getSubmission returns a previously stored submission', async () => {
+  const { db, pool } = createDbClient(databaseUrl);
+  const userId = randomUUID();
+  const stackId = randomUUID();
+  let enrollmentId: string | undefined;
+  let versionId: string | undefined;
+  let challengeId: string | undefined;
+  let submissionId: string | undefined;
+
+  try {
+    const [challenge] = await db.insert(challenges).values({ title: 'Challenge C', level: 'junior' }).returning();
+    challengeId = challenge.id;
+    const [version] = await db
+      .insert(challengeVersions)
+      .values({ challengeId, version: 1, level: 'junior', rubric: {}, openapiRef: 'c', hiddenTestsRef: 'c' })
+      .returning();
+    versionId = version.id;
+
+    const [enrollment] = await db
+      .insert(enrollments)
+      .values({ userId, challengeVersionId: versionId, mode: 'backend', stackId, status: 'active' })
+      .returning();
+    enrollmentId = enrollment.id;
+
+    const inserted = await submit(enrollmentId, 'sha-get', databaseUrl);
+    submissionId = inserted.id;
+
+    const result = await getSubmission(submissionId, databaseUrl);
+
+    assert.equal(result?.id, submissionId);
+    assert.equal(result?.enrollmentId, enrollmentId);
+    assert.equal(result?.commitSha, 'sha-get');
+    assert.equal(result?.status, 'queued');
+  } finally {
+    if (submissionId) await db.delete(submissions).where(eq(submissions.id, submissionId));
+    if (enrollmentId) await db.delete(enrollments).where(eq(enrollments.id, enrollmentId));
+    if (versionId) await db.delete(challengeVersions).where(eq(challengeVersions.id, versionId));
+    if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));
     await pool.end();
   }
 });

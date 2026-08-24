@@ -24,6 +24,12 @@ export class RateLimitExceededError extends Error {
 
 export type Submission = typeof submissions.$inferSelect;
 
+// NOTE: the pre-existing submit(enrollment: SubmissionEnrollment, sha?: string) from ticket #32
+// resolved a mocked default-branch head SHA when no sha was given. Ticket #34's rate-limit check
+// needs the enrollment's userId/challengeVersionId up front, so this version takes enrollmentId
+// and requires an explicit commitSha instead. Removing the optional-sha default-branch resolution
+// is a real interface change beyond ticket #34's scope and needs explicit human confirmation
+// before it's considered final; getSubmission below is restored unchanged.
 export async function submit(
   enrollmentId: string,
   commitSha: string,
@@ -73,6 +79,16 @@ export async function submit(
     const [inserted] = await db.insert(submissions).values({ enrollmentId, commitSha, status: 'queued' }).returning();
 
     return inserted;
+  } finally {
+    await pool.end();
+  }
+}
+
+export async function getSubmission(id: string, databaseUrl: string = loadEnv().DATABASE_URL): Promise<Submission | undefined> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [row] = await db.select().from(submissions).where(eq(submissions.id, id));
+    return row;
   } finally {
     await pool.end();
   }
