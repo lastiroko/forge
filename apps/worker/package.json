@@ -9,7 +9,9 @@
     "test": "tsx --test src"
   },
   "dependencies": {
-    "@forge/shared": "0.0.0"
+    "@forge/shared": "0.0.0",
+    "yaml": "^2.5.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
