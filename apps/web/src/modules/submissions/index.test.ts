@@ -12,8 +12,13 @@ test('rejects a sixth submission for the same member and challenge within the ro
   const { db, pool } = createDbClient(databaseUrl);
   const userId = randomUUID();
   const stackId = randomUUID();
-  const insertedSubmissionIds = [];
-  let enrollmentAId, enrollmentBId, versionAId, versionBId, challengeAId, challengeBId;
+  const insertedSubmissionIds: string[] = [];
+  let enrollmentAId: string | undefined;
+  let enrollmentBId: string | undefined;
+  let versionAId: string | undefined;
+  let versionBId: string | undefined;
+  let challengeAId: string | undefined;
+  let challengeBId: string | undefined;
 
   try {
     const [challengeA] = await db.insert(challenges).values({ title: 'Challenge A', level: 'junior' }).returning();
@@ -51,7 +56,7 @@ test('rejects a sixth submission for the same member and challenge within the ro
     }
 
     await assert.rejects(
-      () => submit(enrollmentAId, 'sha-6', databaseUrl),
+      () => submit(enrollmentAId!, 'sha-6', databaseUrl),
       (error) => {
         assert.ok(error instanceof RateLimitExceededError);
         assert.ok(error.retryAfterSeconds > 0);
