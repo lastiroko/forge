@@ -1,4 +1,24 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, unique } from 'drizzle-orm/pg-core';
+import { pgTable, pgSchema, uuid, text, bigint, timestamp, integer, boolean, jsonb, unique } from 'drizzle-orm/pg-core';
+
+export const appSchema = pgSchema('app');
+
+export const users = appSchema.table('users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  githubId: bigint('github_id', { mode: 'number' }).notNull(),
+  handle: text('handle').notNull(),
+  displayName: text('display_name').notNull(),
+  avatarUrl: text('avatar_url'),
+  email: text('email').notNull(),
+  role: text('role').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const sessions = appSchema.table('sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const enrollments = pgTable('enrollments', {
   id: uuid('id').primaryKey().defaultRandom(),
