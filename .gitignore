@@ -2,3 +2,4 @@
 .aider*
 node_modules/
 dist/
+.next/
