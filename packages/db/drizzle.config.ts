@@ -1,13 +1,10 @@
 import type { Config } from 'drizzle-kit';
-import { loadEnv } from '@forge/shared';
-
-const env = loadEnv();
 
 export default {
   schema: './src/schema.ts',
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {
-    url: env.DATABASE_URL,
+    url: process.env.DATABASE_URL ?? 'postgres://forge:forge@postgres:5432/forge',
   },
 } satisfies Config;
