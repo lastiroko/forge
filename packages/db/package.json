@@ -12,7 +12,8 @@
   "dependencies": {
     "@forge/shared": "0.0.0",
     "drizzle-orm": "^0.33.0",
-    "pg": "^8.12.0"
+    "pg": "^8.12.0",
+    "pg-boss": "^9.0.3"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
