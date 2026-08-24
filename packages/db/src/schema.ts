@@ -37,3 +37,11 @@ export const challengeVersions = pgTable('challenge_versions', {
 }, (table) => ({
   challengeVersionUnique: unique().on(table.challengeId, table.version),
 }));
+
+export const submissions = pgTable('submissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  enrollmentId: uuid('enrollment_id').notNull().references(() => enrollments.id),
+  commitSha: text('commit_sha').notNull(),
+  status: text('status').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
