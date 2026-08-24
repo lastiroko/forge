@@ -9,6 +9,7 @@
     "test": "tsx --test src/app/*.test.ts"
   },
   "dependencies": {
+    "@forge/shared": "0.0.0",
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"

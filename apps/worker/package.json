@@ -8,6 +8,9 @@
     "start": "tsx src/server.ts",
     "test": "tsx --test src/*.test.ts"
   },
+  "dependencies": {
+    "@forge/shared": "0.0.0"
+  },
   "devDependencies": {
     "@types/node": "^20.14.10",
     "tsx": "^4.16.2"

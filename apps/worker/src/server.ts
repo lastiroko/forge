@@ -1,4 +1,5 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { loadEnv, type Env } from '@forge/shared';
 
 export function createServer() {
   return createHttpServer((req: IncomingMessage, res: ServerResponse) => {
@@ -13,8 +14,14 @@ export function createServer() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const port = Number(process.env.PORT) || 3000;
-  createServer().listen(port, () => {
-    console.log(`worker listening on http://localhost:${port}`);
+  let env: Env;
+  try {
+    env = loadEnv();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+  createServer().listen(env.PORT, () => {
+    console.log(`worker listening on http://localhost:${env.PORT}`);
   });
 }
