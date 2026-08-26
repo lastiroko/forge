@@ -1,4 +1,4 @@
-import { listChallenges, type Stack } from '../../modules/catalogue/index.js';
+import { listChallenges, type Stack } from '../../modules/catalogue';
 
 export const revalidate = 60;
 

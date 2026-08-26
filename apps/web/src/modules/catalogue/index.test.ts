@@ -93,12 +93,12 @@ test('getChallenge returns the challenge row by id', async () => {
 
 test('listChallenges returns enabled stacks and basePoints for a challenge', async () => {
   const { db, pool } = createDbClient(databaseUrl);
-  let challengeId;
-  let versionId;
-  let stackAId;
-  let stackBId;
-  let challengeStackAId;
-  let challengeStackBId;
+  let challengeId: string | undefined;
+  let versionId: string | undefined;
+  let stackAId: string | undefined;
+  let stackBId: string | undefined;
+  let challengeStackAId: string | undefined;
+  let challengeStackBId: string | undefined;
   try {
     const [challenge] = await db.insert(challenges).values({ title: 'Stacked challenge', level: 'junior' }).returning();
     challengeId = challenge.id;
@@ -138,10 +138,10 @@ test('listChallenges returns enabled stacks and basePoints for a challenge', asy
 
 test('listChallenges({ level: "junior" }) excludes a mid-level challenge', async () => {
   const { db, pool } = createDbClient(databaseUrl);
-  let juniorId;
-  let juniorVersionId;
-  let midId;
-  let midVersionId;
+  let juniorId: string | undefined;
+  let juniorVersionId: string | undefined;
+  let midId: string | undefined;
+  let midVersionId: string | undefined;
   try {
     const [junior] = await db.insert(challenges).values({ title: 'Level filter junior', level: 'junior' }).returning();
     juniorId = junior.id;
@@ -173,10 +173,10 @@ test('listChallenges({ level: "junior" }) excludes a mid-level challenge', async
 
 test('listChallenges({ mode: "fullstack" }) excludes a backend-only challenge', async () => {
   const { db, pool } = createDbClient(databaseUrl);
-  let backendOnlyId;
-  let backendOnlyVersionId;
-  let fullstackId;
-  let fullstackVersionId;
+  let backendOnlyId: string | undefined;
+  let backendOnlyVersionId: string | undefined;
+  let fullstackId: string | undefined;
+  let fullstackVersionId: string | undefined;
   try {
     const [backendOnly] = await db.insert(challenges).values({ title: 'Mode filter backend only', level: 'junior', fullstackEnabled: false }).returning();
     backendOnlyId = backendOnly.id;
@@ -208,8 +208,8 @@ test('listChallenges({ mode: "fullstack" }) excludes a backend-only challenge', 
 
 test('listChallenges() always returns completionCount 0', async () => {
   const { db, pool } = createDbClient(databaseUrl);
-  let challengeId;
-  let versionId;
+  let challengeId: string | undefined;
+  let versionId: string | undefined;
   try {
     const [challenge] = await db.insert(challenges).values({ title: 'Completion count challenge', level: 'senior' }).returning();
     challengeId = challenge.id;
