@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { eq } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
-import { listChallenges, getChallenge, getVersion } from './index.js';
+import { listChallenges, getChallenge, getVersion, getLatestPublishedVersion } from './index.js';
 
 const { challenges, challengeVersions } = schema;
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
@@ -86,6 +86,43 @@ test('getChallenge returns the challenge row by id', async () => {
     assert.equal(result?.id, challengeId);
     assert.equal(result?.title, 'Lookup challenge');
   } finally {
+    if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));
+    await pool.end();
+  }
+});
+
+test('getLatestPublishedVersion returns the highest-numbered published version, ignoring a higher-numbered draft', async () => {
+  const { db, pool } = createDbClient(databaseUrl);
+  let challengeId;
+  let versionOneId;
+  let versionTwoId;
+  let versionThreeId;
+  try {
+    const [challenge] = await db.insert(challenges).values({ title: 'Multi-version challenge', level: 'junior' }).returning();
+    challengeId = challenge.id;
+
+    const [versionOne] = await db.insert(challengeVersions).values({
+      challengeId, version: 1, level: 'junior', rubric: {}, openapiRef: 'openapi/v1.yaml', hiddenTestsRef: 'hidden/v1', publishedAt: new Date('2026-01-01T00:00:00Z'),
+    }).returning();
+    versionOneId = versionOne.id;
+
+    const [versionTwo] = await db.insert(challengeVersions).values({
+      challengeId, version: 2, level: 'junior', rubric: {}, openapiRef: 'openapi/v2.yaml', hiddenTestsRef: 'hidden/v2', publishedAt: new Date('2026-02-01T00:00:00Z'),
+    }).returning();
+    versionTwoId = versionTwo.id;
+
+    const [versionThree] = await db.insert(challengeVersions).values({
+      challengeId, version: 3, level: 'junior', rubric: {}, openapiRef: 'openapi/v3.yaml', hiddenTestsRef: 'hidden/v3',
+    }).returning();
+    versionThreeId = versionThree.id;
+
+    const result = await getLatestPublishedVersion(challengeId, databaseUrl);
+
+    assert.equal(result?.id, versionTwoId);
+  } finally {
+    if (versionOneId) await db.delete(challengeVersions).where(eq(challengeVersions.id, versionOneId));
+    if (versionTwoId) await db.delete(challengeVersions).where(eq(challengeVersions.id, versionTwoId));
+    if (versionThreeId) await db.delete(challengeVersions).where(eq(challengeVersions.id, versionThreeId));
     if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));
     await pool.end();
   }

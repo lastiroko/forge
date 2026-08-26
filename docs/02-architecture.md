@@ -217,6 +217,7 @@ erDiagram
     uuid id
     int version
     text level
+    text brief
     jsonb rubric
     text openapi_ref
     text hidden_tests_ref
