@@ -43,7 +43,16 @@ export const challenges = pgTable('challenges', {
   level: text('level').notNull(),
   backendEnabled: boolean('backend_enabled').notNull().default(true),
   fullstackEnabled: boolean('fullstack_enabled').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const challengeStacks = pgTable('challenge_stacks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  challengeId: uuid('challenge_id').notNull().references(() => challenges.id),
+  stackId: uuid('stack_id').notNull().references(() => stacks.id),
+}, (table) => ({
+  challengeStackUnique: unique().on(table.challengeId, table.stackId),
+}));
 
 export const challengeVersions = pgTable('challenge_versions', {
   id: uuid('id').primaryKey().defaultRandom(),
