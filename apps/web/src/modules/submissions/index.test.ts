@@ -2,8 +2,9 @@ import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { eq, inArray } from 'drizzle-orm';
-import { createDbClient, schema } from '@forge/db';
+import { createDbClient, schema, getQueue } from '@forge/db';
 import { submit, getSubmission, RateLimitExceededError } from './index.js';
+import { GRADING_TOPIC } from '../grading/index.js';
 
 const { challenges, challengeVersions, enrollments, submissions } = schema;
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
@@ -122,5 +123,59 @@ test('getSubmission returns a previously stored submission', async () => {
     if (versionId) await db.delete(challengeVersions).where(eq(challengeVersions.id, versionId));
     if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));
     await pool.end();
+  }
+});
+
+test('submit enqueues exactly one grading job carrying the new submission id', async () => {
+  const { db, pool } = createDbClient(databaseUrl);
+  const userId = randomUUID();
+  const stackId = randomUUID();
+  let enrollmentId: string | undefined;
+  let versionId: string | undefined;
+  let challengeId: string | undefined;
+  let submissionId: string | undefined;
+  const boss = await getQueue(databaseUrl);
+
+  try {
+    const [challenge] = await db.insert(challenges).values({ title: 'Challenge D', level: 'junior' }).returning();
+    challengeId = challenge.id;
+    const [version] = await db
+      .insert(challengeVersions)
+      .values({ challengeId, version: 1, level: 'junior', rubric: {}, openapiRef: 'd', hiddenTestsRef: 'd' })
+      .returning();
+    versionId = version.id;
+
+    const [enrollment] = await db
+      .insert(enrollments)
+      .values({ userId, challengeVersionId: versionId, mode: 'backend', stackId, status: 'active' })
+      .returning();
+    enrollmentId = enrollment.id;
+
+    const received: Array<{ submissionId: string }> = [];
+    let resolveReceived: () => void;
+    const gotOne = new Promise<void>((resolve) => {
+      resolveReceived = resolve;
+    });
+
+    await boss.work(GRADING_TOPIC, async (job) => {
+      received.push(job.data as { submissionId: string });
+      resolveReceived();
+    });
+
+    const submission = await submit(enrollmentId, 'sha-grading-job', databaseUrl);
+    submissionId = submission.id;
+
+    await gotOne;
+
+    assert.equal(received.length, 1);
+    assert.equal(received[0].submissionId, submission.id);
+    assert.equal(submission.status, 'queued');
+  } finally {
+    if (submissionId) await db.delete(submissions).where(eq(submissions.id, submissionId));
+    if (enrollmentId) await db.delete(enrollments).where(eq(enrollments.id, enrollmentId));
+    if (versionId) await db.delete(challengeVersions).where(eq(challengeVersions.id, versionId));
+    if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));
+    await pool.end();
+    await boss.stop();
   }
 });
