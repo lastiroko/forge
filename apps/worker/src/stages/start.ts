@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Challenge } from '../lib/challenge-schema.js';
-import { createInternalNetwork, removeNetwork, runContainer, removeContainer } from '../lib/docker.js';
+import { createInternalNetwork, runContainer } from '../lib/docker.js';
 import { generateDatabaseCredentials, type DatabaseCredentials } from '../lib/credentials.js';
+import { teardownRun } from './teardown.js';
 
 export interface StartResult {
   runId: string;
@@ -24,10 +25,7 @@ export async function startRun(imageTag: string, challenge: Challenge): Promise<
   const serviceContainerIds: string[] = [];
 
   const cleanup = async () => {
-    for (const name of [...containerNames].reverse()) {
-      await removeContainer(name).catch(() => {});
-    }
-    await removeNetwork(networkName).catch(() => {});
+    await teardownRun({ networkName, containerNames });
   };
 
   try {
