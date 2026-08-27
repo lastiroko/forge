@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { eq } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
-import { listChallenges, getChallenge, getVersion } from './index.js';
+import { listChallenges, getChallenge, getEnabledStacks, getLatestPublishedVersion, getVersion } from './index.js';
 
 const { challenges, challengeVersions, challengeStacks, stacks } = schema;
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
@@ -224,6 +224,62 @@ test('listChallenges() always returns completionCount 0', async () => {
     assert.ok(result.every((c) => c.completionCount === 0));
   } finally {
     if (versionId) await db.delete(challengeVersions).where(eq(challengeVersions.id, versionId));
+    if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));
+    await pool.end();
+  }
+});
+
+test('getEnabledStacks returns only stacks linked to the challenge', async () => {
+  const { db, pool } = createDbClient(databaseUrl);
+  let challengeId;
+  let linkedStackId;
+  let unlinkedStackId;
+  let challengeStackId;
+  try {
+    const [challenge] = await db.insert(challenges).values({ title: 'Enabled stacks lookup', level: 'junior' }).returning();
+    challengeId = challenge.id;
+    const [linkedStack] = await db.insert(stacks).values({ language: 'Rust', framework: 'Axum' }).returning();
+    linkedStackId = linkedStack.id;
+    const [unlinkedStack] = await db.insert(stacks).values({ language: 'Python', framework: 'FastAPI' }).returning();
+    unlinkedStackId = unlinkedStack.id;
+    const [challengeStack] = await db.insert(challengeStacks).values({ challengeId, stackId: linkedStackId }).returning();
+    challengeStackId = challengeStack.id;
+
+    const result = await getEnabledStacks(challengeId, databaseUrl);
+
+    assert.deepEqual(result.map((stack) => stack.id), [linkedStackId]);
+  } finally {
+    if (challengeStackId) await db.delete(challengeStacks).where(eq(challengeStacks.id, challengeStackId));
+    if (linkedStackId) await db.delete(stacks).where(eq(stacks.id, linkedStackId));
+    if (unlinkedStackId) await db.delete(stacks).where(eq(stacks.id, unlinkedStackId));
+    if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));
+    await pool.end();
+  }
+});
+
+test('getLatestPublishedVersion returns the highest published version and ignores drafts', async () => {
+  const { db, pool } = createDbClient(databaseUrl);
+  let challengeId;
+  const versionIds: string[] = [];
+  try {
+    const [challenge] = await db.insert(challenges).values({ title: 'Latest published lookup', level: 'mid' }).returning();
+    challengeId = challenge.id;
+    for (const values of [
+      { version: 1, publishedAt: new Date('2026-01-01T00:00:00Z') },
+      { version: 2, publishedAt: new Date('2026-02-01T00:00:00Z') },
+      { version: 3, publishedAt: null },
+    ]) {
+      const [version] = await db.insert(challengeVersions).values({
+        challengeId, version: values.version, level: 'mid', rubric: {}, openapiRef: `openapi/v${values.version}.yaml`, hiddenTestsRef: `hidden/v${values.version}`, publishedAt: values.publishedAt,
+      }).returning();
+      versionIds.push(version.id);
+    }
+
+    const result = await getLatestPublishedVersion(challengeId, databaseUrl);
+
+    assert.equal(result?.version, 2);
+  } finally {
+    for (const id of versionIds) await db.delete(challengeVersions).where(eq(challengeVersions.id, id));
     if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));
     await pool.end();
   }
