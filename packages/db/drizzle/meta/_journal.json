@@ -50,6 +50,13 @@
       "when": 1787853000000,
       "tag": "0006_leaderboard_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787853100000,
+      "tag": "0007_solutions_comments_reports",
+      "breakpoints": true
     }
   ]
 }

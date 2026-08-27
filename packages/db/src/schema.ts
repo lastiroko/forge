@@ -103,8 +103,6 @@ export const reports = pgTable('reports', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// TODO: Generate migration 0007 with drizzle-kit during CHECK; package scripts are prohibited in this environment.
-
 export const pointsLedger = pgTable('points_ledger', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull(),
