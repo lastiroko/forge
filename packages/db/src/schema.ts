@@ -74,3 +74,12 @@ export const submissions = pgTable('submissions', {
   status: text('status').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const pointsLedger = pgTable('points_ledger', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  delta: integer('delta').notNull(),
+  reason: text('reason').notNull(),
+  gradingRunId: uuid('grading_run_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
