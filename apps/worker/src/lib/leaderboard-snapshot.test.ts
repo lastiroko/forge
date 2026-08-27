@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import { createDbClient, getQueue, leaderboardSnapshots, pointsEntries } from '@forge/db';
+import { createDbClient, getQueue, leaderboardSnapshots, pointsLedger } from '@forge/db';
 import { recomputeLeaderboardSnapshots, registerLeaderboardSnapshotJob } from './leaderboard-snapshot.js';
 
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
@@ -11,7 +11,7 @@ async function seedRankings() {
   const { db, pool } = createDbClient(databaseUrl);
   const userIds = [randomUUID(), randomUUID(), randomUUID()];
   const stackIds = [randomUUID(), randomUUID()];
-  await db.insert(pointsEntries).values([
+  await db.insert(pointsLedger).values([
     { userId: userIds[0], stackId: stackIds[0], delta: 30, reason: 'test' },
     { userId: userIds[0], stackId: stackIds[1], delta: 10, reason: 'test' },
     { userId: userIds[1], stackId: stackIds[0], delta: 25, reason: 'test' },
@@ -54,7 +54,7 @@ async function cleanUpRankings(
   userIds: string[],
 ) {
   await db.delete(leaderboardSnapshots).where(inArray(leaderboardSnapshots.userId, userIds));
-  await db.delete(pointsEntries).where(inArray(pointsEntries.userId, userIds));
+  await db.delete(pointsLedger).where(inArray(pointsLedger.userId, userIds));
 }
 
 test('recomputes global and per-stack leaderboard snapshots', async () => {

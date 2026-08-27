@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { createDbClient } from './client.js';
-import { leaderboardSnapshots, pointsEntries } from './schema.js';
+import { leaderboardSnapshots, pointsLedger } from './schema.js';
 
 test('inserts ledger entries and leaderboard snapshots and reads them back', async () => {
   const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
@@ -14,7 +14,7 @@ test('inserts ledger entries and leaderboard snapshots and reads them back', asy
   const snapshotIds: string[] = [];
 
   try {
-    const insertedEntries = await db.insert(pointsEntries).values([
+    const insertedEntries = await db.insert(pointsLedger).values([
       { userId, stackId, delta: 10, reason: 'challenge completed' },
       { userId, stackId, delta: 5, reason: 'bonus' },
     ]).returning();
@@ -26,7 +26,7 @@ test('inserts ledger entries and leaderboard snapshots and reads them back', asy
     ]).returning();
     snapshotIds.push(...insertedSnapshots.map((snapshot) => snapshot.id));
 
-    const entryRows = await db.select().from(pointsEntries).where(eq(pointsEntries.userId, userId));
+    const entryRows = await db.select().from(pointsLedger).where(eq(pointsLedger.userId, userId));
     const snapshotRows = await db.select().from(leaderboardSnapshots).where(eq(leaderboardSnapshots.userId, userId));
 
     assert.deepEqual(entryRows.map((entry) => entry.delta).sort((a, b) => a - b), [5, 10]);
@@ -39,7 +39,7 @@ test('inserts ledger entries and leaderboard snapshots and reads them back', asy
       await db.delete(leaderboardSnapshots).where(eq(leaderboardSnapshots.id, id));
     }
     for (const id of pointEntryIds) {
-      await db.delete(pointsEntries).where(eq(pointsEntries.id, id));
+      await db.delete(pointsLedger).where(eq(pointsLedger.id, id));
     }
     await pool.end();
   }

@@ -1,5 +1,5 @@
 import type PgBoss from 'pg-boss';
-import { createDbClient, leaderboardSnapshots, pointsEntries } from '@forge/db';
+import { createDbClient, leaderboardSnapshots, pointsLedger } from '@forge/db';
 import { loadEnv } from '@forge/shared';
 
 export const LEADERBOARD_SNAPSHOT_QUEUE = 'leaderboard-snapshot';
@@ -20,15 +20,17 @@ export async function recomputeLeaderboardSnapshots(databaseUrl?: string): Promi
   const { db, pool } = createDbClient(databaseUrl);
 
   try {
-    const entries = await db.select().from(pointsEntries);
+    const entries = await db.select().from(pointsLedger);
     const globalTotals = new Map<string, number>();
     const stackTotals = new Map<string, Map<string, number>>();
 
     for (const entry of entries) {
       globalTotals.set(entry.userId, (globalTotals.get(entry.userId) ?? 0) + entry.delta);
-      const totals = stackTotals.get(entry.stackId) ?? new Map<string, number>();
-      totals.set(entry.userId, (totals.get(entry.userId) ?? 0) + entry.delta);
-      stackTotals.set(entry.stackId, totals);
+      if (entry.stackId) {
+        const totals = stackTotals.get(entry.stackId) ?? new Map<string, number>();
+        totals.set(entry.userId, (totals.get(entry.userId) ?? 0) + entry.delta);
+        stackTotals.set(entry.stackId, totals);
+      }
     }
 
     const computedAt = new Date();

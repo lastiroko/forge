@@ -1,6 +1,6 @@
 {
-  "id": "fb838f3f-d99a-4557-b4e0-5accaccd2029",
-  "prevId": "55abec95-7c2c-4a46-a43c-46ca3f44dbff",
+  "id": "9bc84359-1fcf-45c5-a439-97596bedb67c",
+  "prevId": "fb838f3f-d99a-4557-b4e0-5accaccd2029",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -350,6 +350,60 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {}
     },
+    "public.leaderboard_snapshots": {
+      "name": "leaderboard_snapshots",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stack_id": {
+          "name": "stack_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total_points": {
+          "name": "total_points",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rank": {
+          "name": "rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "computed_at": {
+          "name": "computed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
     "public.points_ledger": {
       "name": "points_ledger",
       "schema": "",
@@ -366,6 +420,12 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "stack_id": {
+          "name": "stack_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "delta": {
           "name": "delta",

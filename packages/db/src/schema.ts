@@ -78,18 +78,10 @@ export const submissions = pgTable('submissions', {
 export const pointsLedger = pgTable('points_ledger', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull(),
+  stackId: uuid('stack_id'),
   delta: integer('delta').notNull(),
   reason: text('reason').notNull(),
   gradingRunId: uuid('grading_run_id'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const pointsEntries = pgTable('points_entries', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull(),
-  stackId: uuid('stack_id').notNull(),
-  delta: integer('delta').notNull(),
-  reason: text('reason').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
