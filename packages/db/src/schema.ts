@@ -83,3 +83,22 @@ export const pointsLedger = pgTable('points_ledger', {
   gradingRunId: uuid('grading_run_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const pointsEntries = pgTable('points_entries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  stackId: uuid('stack_id').notNull(),
+  delta: integer('delta').notNull(),
+  reason: text('reason').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const leaderboardSnapshots = pgTable('leaderboard_snapshots', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  scope: text('scope').notNull(),
+  stackId: uuid('stack_id'),
+  userId: uuid('user_id').notNull(),
+  totalPoints: integer('total_points').notNull(),
+  rank: integer('rank').notNull(),
+  computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
+});
