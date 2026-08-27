@@ -1,4 +1,4 @@
-import { pgTable, pgSchema, uuid, text, bigint, timestamp, integer, boolean, jsonb, unique } from 'drizzle-orm/pg-core';
+import { pgTable, pgSchema, uuid, text, bigint, timestamp, integer, boolean, jsonb, numeric, unique } from 'drizzle-orm/pg-core';
 
 export const appSchema = pgSchema('app');
 
@@ -75,6 +75,15 @@ export const submissions = pgTable('submissions', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const gradingRuns = pgTable('grading_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  submissionId: uuid('submission_id').notNull().references(() => submissions.id),
+  status: text('status').notNull(),
+  score: numeric('score', { mode: 'number' }).notNull(),
+  reportUrl: text('report_url'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const solutions = pgTable('solutions', {
   id: uuid('id').primaryKey().defaultRandom(),
   submissionId: uuid('submission_id').notNull().references(() => submissions.id),
@@ -109,7 +118,7 @@ export const pointsLedger = pgTable('points_ledger', {
   stackId: uuid('stack_id'),
   delta: integer('delta').notNull(),
   reason: text('reason').notNull(),
-  gradingRunId: uuid('grading_run_id'),
+  gradingRunId: uuid('grading_run_id').references(() => gradingRuns.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
