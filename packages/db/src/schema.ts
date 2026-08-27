@@ -75,6 +75,36 @@ export const submissions = pgTable('submissions', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const solutions = pgTable('solutions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  submissionId: uuid('submission_id').notNull().references(() => submissions.id),
+  title: text('title').notNull(),
+  writeup: text('writeup').notNull(),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+}, (table) => ({
+  solutionsSubmissionUnique: unique().on(table.submissionId),
+}));
+
+export const comments = pgTable('comments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  targetType: text('target_type').notNull(),
+  targetId: uuid('target_id').notNull(),
+  authorId: uuid('author_id').notNull().references(() => users.id),
+  body: text('body').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const reports = pgTable('reports', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  targetType: text('target_type').notNull(),
+  targetId: uuid('target_id').notNull(),
+  reporterId: uuid('reporter_id').notNull().references(() => users.id),
+  reason: text('reason').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// TODO: Generate migration 0007 with drizzle-kit during CHECK; package scripts are prohibited in this environment.
+
 export const pointsLedger = pgTable('points_ledger', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull(),
