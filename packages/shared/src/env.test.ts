@@ -10,3 +10,10 @@ test('loadEnv returns parsed values for a valid environment', () => {
 test('loadEnv throws naming the missing variable', () => {
   assert.throws(() => loadEnv({ PORT: '4000' }), /DATABASE_URL/);
 });
+
+test('loadEnv applies S3_* defaults matching docker-compose MinIO', () => {
+  const env = loadEnv({ DATABASE_URL: 'postgres://user:pass@localhost:5432/forge' });
+  assert.equal(env.S3_ENDPOINT, 'http://minio:9000');
+  assert.equal(env.S3_BUCKET, 'forge-reports');
+  assert.equal(env.S3_FORCE_PATH_STYLE, true);
+});
