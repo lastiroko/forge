@@ -1,6 +1,7 @@
 import { and, eq, gte } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
+import { enqueue } from '../grading/index.js';
 
 const { enrollments, challengeVersions, submissions } = schema;
 
@@ -77,6 +78,8 @@ export async function submit(
     }
 
     const [inserted] = await db.insert(submissions).values({ enrollmentId, commitSha, status: 'queued' }).returning();
+
+    await enqueue(inserted.id, databaseUrl);
 
     return inserted;
   } finally {
