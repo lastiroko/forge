@@ -111,6 +111,3 @@ export const notificationPreferences = pgTable('notification_preferences', {
 }, (table) => ({
   notificationPreferenceUnique: unique().on(table.userId, table.eventType),
 }));
-
-// TODO: Generate migration 0007 with `npm run db:generate -- --name notifications` during CHECK;
-// this implementation phase explicitly prohibits running non-trivial shell commands.
