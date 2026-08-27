@@ -105,9 +105,13 @@ export const notifications = pgTable('notifications', {
 });
 
 export const notificationPreferences = pgTable('notification_preferences', {
+  id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull(),
   eventType: text('event_type').notNull(),
   emailEnabled: boolean('email_enabled').notNull().default(true),
 }, (table) => ({
-  notificationPreferenceUnique: unique().on(table.userId, table.eventType),
+  notificationPreferencesUnique: unique().on(table.userId, table.eventType),
 }));
+
+// TODO: Generate migration 0008 after dependencies are installed; this checkout already
+// contains 0007_notifications, so the generated migration will only add the preference id.

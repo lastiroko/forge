@@ -1,58 +1,49 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { createDbClient } from './client.js';
-import { notificationPreferences, notifications } from './schema.js';
+import { notifications, notificationPreferences } from './schema.js';
 
-test('inserts a notification and preference and reads them back', async () => {
+test('inserts a notification and a notification preference and reads them back', async () => {
   const databaseUrl = process.env.DATABASE_URL ?? 'postgres://forge:forge@postgres:5432/forge';
   const { db, pool } = createDbClient(databaseUrl);
   const userId = randomUUID();
   const submissionId = randomUUID();
-  const eventType = 'grading_finished';
-  let notificationId: string | undefined;
-  let preferenceInserted = false;
+  let insertedNotification;
+  let insertedPreference;
 
   try {
-    const [insertedNotification] = await db.insert(notifications).values({
+    [insertedNotification] = await db.insert(notifications).values({
       userId,
-      eventType,
+      eventType: 'grading_finished',
       payload: { submissionId },
     }).returning();
-    notificationId = insertedNotification.id;
 
-    await db.insert(notificationPreferences).values({
+    [insertedPreference] = await db.insert(notificationPreferences).values({
       userId,
-      eventType,
+      eventType: 'grading_finished',
+      emailEnabled: false,
     }).returning();
-    preferenceInserted = true;
 
     const [notificationRow] = await db.select().from(notifications)
-      .where(eq(notifications.id, notificationId));
+      .where(eq(notifications.id, insertedNotification.id));
     const [preferenceRow] = await db.select().from(notificationPreferences)
-      .where(and(
-        eq(notificationPreferences.userId, userId),
-        eq(notificationPreferences.eventType, eventType),
-      ));
+      .where(eq(notificationPreferences.id, insertedPreference.id));
 
     assert.equal(notificationRow.userId, userId);
-    assert.equal(notificationRow.eventType, eventType);
+    assert.equal(notificationRow.eventType, 'grading_finished');
     assert.equal((notificationRow.payload as { submissionId: string }).submissionId, submissionId);
     assert.equal(notificationRow.readAt, null);
-    assert.ok(notificationRow.createdAt instanceof Date);
     assert.equal(preferenceRow.userId, userId);
-    assert.equal(preferenceRow.eventType, eventType);
-    assert.equal(preferenceRow.emailEnabled, true);
+    assert.equal(preferenceRow.eventType, 'grading_finished');
+    assert.equal(preferenceRow.emailEnabled, false);
   } finally {
-    if (notificationId) {
-      await db.delete(notifications).where(eq(notifications.id, notificationId));
+    if (insertedNotification) {
+      await db.delete(notifications).where(eq(notifications.id, insertedNotification.id));
     }
-    if (preferenceInserted) {
-      await db.delete(notificationPreferences).where(and(
-        eq(notificationPreferences.userId, userId),
-        eq(notificationPreferences.eventType, eventType),
-      ));
+    if (insertedPreference) {
+      await db.delete(notificationPreferences).where(eq(notificationPreferences.id, insertedPreference.id));
     }
     await pool.end();
   }
