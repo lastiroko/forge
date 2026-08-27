@@ -43,6 +43,13 @@
       "when": 1787852800000,
       "tag": "0005_points_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787853000000,
+      "tag": "0006_leaderboard_snapshots",
+      "breakpoints": true
     }
   ]
 }
