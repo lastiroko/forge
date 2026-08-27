@@ -6,7 +6,8 @@ import { createDbClient } from './client.js';
 import { leaderboardSnapshots, pointsLedger } from './schema.js';
 
 test('inserts ledger entries and leaderboard snapshots and reads them back', async () => {
-  const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
+  // TODO: Centralize this fallback for all database tests once files outside ticket #54 are in scope.
+  const databaseUrl = process.env.DATABASE_URL ?? 'postgres://forge:forge@postgres:5432/forge';
   const { db, pool } = createDbClient(databaseUrl);
   const userId = randomUUID();
   const stackId = randomUUID();

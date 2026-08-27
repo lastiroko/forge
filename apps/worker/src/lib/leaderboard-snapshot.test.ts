@@ -5,7 +5,8 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { createDbClient, getQueue, leaderboardSnapshots, pointsLedger } from '@forge/db';
 import { recomputeLeaderboardSnapshots, registerLeaderboardSnapshotJob } from './leaderboard-snapshot.js';
 
-const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
+// TODO: Centralize this fallback for all database tests once files outside ticket #54 are in scope.
+const databaseUrl = process.env.DATABASE_URL ?? 'postgres://forge:forge@postgres:5432/forge';
 
 async function seedRankings() {
   const { db, pool } = createDbClient(databaseUrl);
