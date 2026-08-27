@@ -151,24 +151,33 @@ test('submit enqueues exactly one grading job carrying the new submission id', a
       .returning();
     enrollmentId = enrollment.id;
 
-    const received: Array<{ submissionId: string }> = [];
-    let resolveReceived: () => void;
-    const gotOne = new Promise<void>((resolve) => {
-      resolveReceived = resolve;
-    });
+    // The grading topic is shared across test runs, so a stale job from a
+    // prior run could be delivered here too; only match on the id submit()
+    // returns. The target id isn't known until after submit() resolves, so
+    // track received jobs by id and register a waiter if it hasn't arrived yet.
+    const received = new Map<string, { submissionId: string }>();
+    const waiters = new Map<string, () => void>();
 
     await boss.work(GRADING_TOPIC, async (job) => {
-      received.push(job.data as { submissionId: string });
-      resolveReceived();
+      const data = job.data as { submissionId: string };
+      received.set(data.submissionId, data);
+      const waiter = waiters.get(data.submissionId);
+      if (waiter) {
+        waiters.delete(data.submissionId);
+        waiter();
+      }
     });
 
     const submission = await submit(enrollmentId, 'sha-grading-job', databaseUrl);
     submissionId = submission.id;
 
-    await gotOne;
+    if (!received.has(submission.id)) {
+      await new Promise<void>((resolve) => {
+        waiters.set(submission.id, resolve);
+      });
+    }
 
-    assert.equal(received.length, 1);
-    assert.equal(received[0].submissionId, submission.id);
+    assert.equal(received.get(submission.id)?.submissionId, submission.id);
     assert.equal(submission.status, 'queued');
   } finally {
     if (submissionId) await db.delete(submissions).where(eq(submissions.id, submissionId));

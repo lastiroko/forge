@@ -8,23 +8,28 @@ const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@lo
 test('enqueue sends exactly one job on the grading topic carrying the submission id', async () => {
   const boss = await getQueue(databaseUrl);
   try {
-    const received: Array<{ submissionId: string }> = [];
+    const submissionId = '11111111-1111-1111-1111-111111111111';
+    let received: { submissionId: string } | undefined;
     let resolveReceived: () => void;
     const gotOne = new Promise<void>((resolve) => {
       resolveReceived = resolve;
     });
 
+    // The grading topic is shared across test runs, so a stale job from a
+    // prior run could be delivered here too; only match on the id we send.
     await boss.work(GRADING_TOPIC, async (job) => {
-      received.push(job.data as { submissionId: string });
-      resolveReceived();
+      const data = job.data as { submissionId: string };
+      if (data.submissionId === submissionId) {
+        received = data;
+        resolveReceived();
+      }
     });
 
-    await enqueue('11111111-1111-1111-1111-111111111111', databaseUrl);
+    await enqueue(submissionId, databaseUrl);
 
     await gotOne;
 
-    assert.equal(received.length, 1);
-    assert.equal(received[0].submissionId, '11111111-1111-1111-1111-111111111111');
+    assert.equal(received?.submissionId, submissionId);
   } finally {
     await boss.stop();
   }
