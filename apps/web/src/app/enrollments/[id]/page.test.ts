@@ -82,8 +82,8 @@ test('GET /enrollments/:id renders every run and artifact for owner and admin', 
     for (const content of ['Run history', 'commit-forty', 'commit-ninety']) assert.ok(body.includes(content));
     assert.match(body, /Score:.*40/);
     assert.match(body, /Score:.*90/);
-    assert.equal(body.match(/Submission status: successful/g)?.length, 2);
-    assert.equal(body.match(/Run status: successful/g)?.length, 2);
+    assert.equal(body.match(/Submission status: (?:<!-- -->)?successful/g)?.length, 2);
+    assert.equal(body.match(/Run status: (?:<!-- -->)?successful/g)?.length, 2);
     for (const kind of ['report', 'build', 'app']) {
       for (const index of [0, 1]) assert.ok(body.includes(`href="https://${kind}.example/${index}"`));
     }
