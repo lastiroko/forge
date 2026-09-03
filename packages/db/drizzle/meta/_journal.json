@@ -85,6 +85,13 @@
       "when": 1788420454586,
       "tag": "0011_add_challenge_version_brief",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788506854586,
+      "tag": "0012_points_totals_cache",
+      "breakpoints": true
     }
   ]
 }
