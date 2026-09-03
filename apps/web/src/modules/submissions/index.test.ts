@@ -3,10 +3,10 @@ import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { eq, inArray } from 'drizzle-orm';
 import { createDbClient, schema, getQueue } from '@forge/db';
-import { submit, getSubmission, RateLimitExceededError } from './index.js';
+import { submit, getSubmission, RateLimitExceededError, streamStatus } from './index.js';
 import { GRADING_TOPIC } from '../grading/index.js';
 
-const { challenges, challengeVersions, enrollments, submissions } = schema;
+const { challenges, challengeVersions, enrollments, submissions, gradingRuns } = schema;
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
 
 test('rejects a sixth submission for the same member and challenge within the rolling hour, but allows one for a different challenge', async () => {
@@ -72,6 +72,7 @@ test('rejects a sixth submission for the same member and challenge within the ro
     assert.equal(seventh.status, 'queued');
   } finally {
     if (insertedSubmissionIds.length) {
+      await db.delete(gradingRuns).where(inArray(gradingRuns.submissionId, insertedSubmissionIds));
       await db.delete(submissions).where(inArray(submissions.id, insertedSubmissionIds));
     }
     if (enrollmentAId) await db.delete(enrollments).where(eq(enrollments.id, enrollmentAId));
@@ -117,8 +118,26 @@ test('getSubmission returns a previously stored submission', async () => {
     assert.equal(result?.enrollmentId, enrollmentId);
     assert.equal(result?.commitSha, 'sha-get');
     assert.equal(result?.status, 'queued');
+
+    const controller = new AbortController();
+    const snapshots = streamStatus(submissionId, controller.signal, databaseUrl);
+    const initial = await snapshots.next();
+    assert.equal(initial.value?.status, 'queued');
+    assert.equal(initial.value?.currentStage, null);
+    const [run] = await db.select().from(gradingRuns).where(eq(gradingRuns.submissionId, submissionId));
+    await db.update(gradingRuns).set({
+      status: 'successful', score: 88, currentStage: 'functional', updatedAt: new Date(Date.now() + 1_000),
+    }).where(eq(gradingRuns.id, run.id));
+    const terminal = await snapshots.next();
+    assert.equal(terminal.value?.currentStage, 'functional');
+    assert.equal(terminal.value?.score, 88);
+    assert.equal((await snapshots.next()).done, true);
+    controller.abort();
   } finally {
-    if (submissionId) await db.delete(submissions).where(eq(submissions.id, submissionId));
+    if (submissionId) {
+      await db.delete(gradingRuns).where(eq(gradingRuns.submissionId, submissionId));
+      await db.delete(submissions).where(eq(submissions.id, submissionId));
+    }
     if (enrollmentId) await db.delete(enrollments).where(eq(enrollments.id, enrollmentId));
     if (versionId) await db.delete(challengeVersions).where(eq(challengeVersions.id, versionId));
     if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));
@@ -155,11 +174,11 @@ test('submit enqueues exactly one grading job carrying the new submission id', a
     // prior run could be delivered here too; only match on the id submit()
     // returns. The target id isn't known until after submit() resolves, so
     // track received jobs by id and register a waiter if it hasn't arrived yet.
-    const received = new Map<string, { submissionId: string }>();
+    const received = new Map<string, { runId: string; submissionId: string }>();
     const waiters = new Map<string, () => void>();
 
     await boss.work(GRADING_TOPIC, async (job) => {
-      const data = job.data as { submissionId: string };
+      const data = job.data as { runId: string; submissionId: string };
       received.set(data.submissionId, data);
       const waiter = waiters.get(data.submissionId);
       if (waiter) {
@@ -178,9 +197,15 @@ test('submit enqueues exactly one grading job carrying the new submission id', a
     }
 
     assert.equal(received.get(submission.id)?.submissionId, submission.id);
+    const [run] = await db.select().from(gradingRuns).where(eq(gradingRuns.submissionId, submission.id));
+    assert.equal(received.get(submission.id)?.runId, run.id);
+    assert.equal(run.status, 'queued');
     assert.equal(submission.status, 'queued');
   } finally {
-    if (submissionId) await db.delete(submissions).where(eq(submissions.id, submissionId));
+    if (submissionId) {
+      await db.delete(gradingRuns).where(eq(gradingRuns.submissionId, submissionId));
+      await db.delete(submissions).where(eq(submissions.id, submissionId));
+    }
     if (enrollmentId) await db.delete(enrollments).where(eq(enrollments.id, enrollmentId));
     if (versionId) await db.delete(challengeVersions).where(eq(challengeVersions.id, versionId));
     if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));

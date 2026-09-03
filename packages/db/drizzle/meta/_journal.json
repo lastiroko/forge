@@ -106,6 +106,13 @@
       "when": 1788507054586,
       "tag": "0014_challenge_version_immutability",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788441600000,
+      "tag": "0015_grading_run_lifecycle",
+      "breakpoints": true
     }
   ]
 }

@@ -1,9 +1,9 @@
-import { and, eq, gte } from 'drizzle-orm';
+import { and, desc, eq, gte } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
 import { enqueue } from '../grading/index.js';
 
-const { enrollments, challengeVersions, submissions } = schema;
+const { enrollments, challengeVersions, submissions, gradingRuns } = schema;
 
 export const RATE_LIMIT_MAX_PER_HOUR = 5;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -79,11 +79,61 @@ export async function submit(
 
     const [inserted] = await db.insert(submissions).values({ enrollmentId, commitSha, status: 'queued' }).returning();
 
-    await enqueue(inserted.id, databaseUrl);
+    await enqueue(inserted, databaseUrl);
 
     return inserted;
   } finally {
     await pool.end();
+  }
+}
+
+export interface GradingStatusSnapshot {
+  id: string;
+  submissionId: string;
+  status: string;
+  score: number | null;
+  reportUrl: string | null;
+  currentStage: string | null;
+  updatedAt: Date;
+}
+
+export async function getLatestGradingStatus(
+  submissionId: string,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<GradingStatusSnapshot | undefined> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [row] = await db.select({
+      id: gradingRuns.id, submissionId: gradingRuns.submissionId, status: gradingRuns.status,
+      score: gradingRuns.score, reportUrl: gradingRuns.reportUrl, currentStage: gradingRuns.currentStage,
+      updatedAt: gradingRuns.updatedAt,
+    }).from(gradingRuns).where(eq(gradingRuns.submissionId, submissionId))
+      .orderBy(desc(gradingRuns.createdAt)).limit(1);
+    return row;
+  } finally {
+    await pool.end();
+  }
+}
+
+const TERMINAL_GRADING_STATUSES = new Set(['successful', 'failed']);
+
+export async function* streamStatus(
+  submissionId: string,
+  signal: AbortSignal,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): AsyncGenerator<GradingStatusSnapshot> {
+  let lastUpdatedAt: number | undefined;
+  while (!signal.aborted) {
+    const snapshot = await getLatestGradingStatus(submissionId, databaseUrl);
+    if (snapshot && snapshot.updatedAt.getTime() !== lastUpdatedAt) {
+      lastUpdatedAt = snapshot.updatedAt.getTime();
+      yield snapshot;
+      if (TERMINAL_GRADING_STATUSES.has(snapshot.status)) return;
+    }
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(resolve, 2_000);
+      signal.addEventListener('abort', () => { clearTimeout(timeout); resolve(); }, { once: true });
+    });
   }
 }
 
@@ -92,6 +142,22 @@ export async function getSubmission(id: string, databaseUrl: string = loadEnv().
   try {
     const [row] = await db.select().from(submissions).where(eq(submissions.id, id));
     return row;
+  } finally {
+    await pool.end();
+  }
+}
+
+export async function getSubmissionForUser(
+  id: string,
+  userId: string,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<Submission | undefined> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [row] = await db.select({ submission: submissions }).from(submissions)
+      .innerJoin(enrollments, eq(submissions.enrollmentId, enrollments.id))
+      .where(and(eq(submissions.id, id), eq(enrollments.userId, userId)));
+    return row?.submission;
   } finally {
     await pool.end();
   }
