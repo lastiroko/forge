@@ -90,3 +90,81 @@ test('registered worker persists supplied stage completion before publishing it'
     await pool.end();
   }
 });
+
+test('registered worker keeps the 90-point run as best regardless of completion order', async () => {
+  const { db, pool } = createDbClient(databaseUrl);
+  const boss = await getQueue(databaseUrl);
+  const enrollmentIds: string[] = [];
+  const submissionIds: string[] = [];
+  const runIds: string[] = [];
+  const scoreByRun = new Map<string, number>();
+  const expectedBest = new Map<string, string>();
+  try {
+    const completionOrders = [[40, 90], [90, 40]];
+    const jobs: Array<{ runId: string; submissionId: string }> = [];
+    for (const scores of completionOrders) {
+      const [enrollment] = await db.insert(enrollments).values({
+        userId: randomUUID(), challengeVersionId: randomUUID(), mode: 'backend', stackId: randomUUID(), status: 'active',
+      }).returning();
+      enrollmentIds.push(enrollment.id);
+      for (const score of scores) {
+        const [submission] = await db.insert(submissions).values({ enrollmentId: enrollment.id, commitSha: `worker-${score}-${randomUUID()}`, status: 'queued' }).returning();
+        submissionIds.push(submission.id);
+        const [run] = await db.insert(gradingRuns).values({ submissionId: submission.id, status: 'queued' }).returning();
+        runIds.push(run.id);
+        scoreByRun.set(run.id, score);
+        jobs.push({ runId: run.id, submissionId: submission.id });
+        if (score === 90) expectedBest.set(enrollment.id, run.id);
+      }
+    }
+
+    const completionResolvers = new Map<string, () => void>();
+    await boss.work(GRADING_COMPLETED_TOPIC, async (job) => {
+      const { id } = job.data as { id: string };
+      completionResolvers.get(id)?.();
+    });
+    await registerWorker(boss, [{
+      name: 'report',
+      run: async (job) => {
+        const score = scoreByRun.get(job.data.runId);
+        if (score === undefined) throw new Error(`missing score for run ${job.data.runId}`);
+        return {
+          outcome: 'passed' as const,
+          score,
+          reportUrl: `https://reports.example/${job.data.runId}`,
+          buildLogUrl: `https://logs.example/${job.data.runId}/build`,
+          appLogUrl: `https://logs.example/${job.data.runId}/app`,
+        };
+      },
+    }], databaseUrl);
+    for (const job of jobs) {
+      let resolveCompletion!: () => void;
+      const completion = new Promise<void>((resolve) => { resolveCompletion = resolve; });
+      completionResolvers.set(job.runId, resolveCompletion);
+      await boss.send('grading', job);
+      await Promise.race([
+        completion,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`completion for ${job.runId} was not published`)), 10_000)),
+      ]);
+    }
+
+    for (const enrollmentId of enrollmentIds) {
+      const [enrollment] = await db.select().from(enrollments).where(eq(enrollments.id, enrollmentId));
+      assert.equal(enrollment.bestGradingRunId, expectedBest.get(enrollmentId));
+    }
+    for (const runId of runIds) {
+      const [run] = await db.select().from(gradingRuns).where(eq(gradingRuns.id, runId));
+      assert.equal(run.score, scoreByRun.get(runId));
+      assert.equal(run.reportUrl, `https://reports.example/${runId}`);
+      assert.equal(run.buildLogUrl, `https://logs.example/${runId}/build`);
+      assert.equal(run.appLogUrl, `https://logs.example/${runId}/app`);
+    }
+  } finally {
+    for (const id of enrollmentIds) await db.update(enrollments).set({ bestGradingRunId: null }).where(eq(enrollments.id, id));
+    for (const id of runIds) await db.delete(gradingRuns).where(eq(gradingRuns.id, id));
+    for (const id of submissionIds) await db.delete(submissions).where(eq(submissions.id, id));
+    for (const id of enrollmentIds) await db.delete(enrollments).where(eq(enrollments.id, id));
+    await boss.stop();
+    await pool.end();
+  }
+});

@@ -133,7 +133,8 @@ test('getEnrollmentHistory authorizes owner and admin and retains submissions wi
     assert.equal(owner?.submissions.length, 3);
     assert.deepEqual(owner?.submissions.flatMap((submission) => submission.runs.map((run) => run.score)).sort(), [40, 90]);
     assert.ok(owner?.submissions.some((submission) => submission.runs.length === 0));
-    assert.equal(owner?.submissions.flatMap((submission) => submission.runs)[0].reportUrl.startsWith('https://reports.example/'), true);
+    const firstRun = owner?.submissions.flatMap((submission) => submission.runs)[0];
+    assert.ok(firstRun?.reportUrl?.startsWith('https://reports.example/'));
     assert.ok(await getEnrollmentHistory(historyEnrollment.id, { id: randomUUID(), role: 'admin' }, databaseUrl));
     assert.equal(await getEnrollmentHistory(historyEnrollment.id, { id: randomUUID(), role: 'member' }, databaseUrl), undefined);
   } finally {

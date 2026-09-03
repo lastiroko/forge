@@ -4,9 +4,10 @@ import { getCurrentUser } from '../../../modules/identity/index.js';
 
 export const dynamic = 'force-dynamic';
 
-export async function renderEnrollmentPage(id: string, viewer: { id: string; role: string } | undefined) {
+export default async function EnrollmentPage({ params }: { params: { id: string } }) {
+  const viewer = await getCurrentUser();
   if (!viewer) notFound();
-  const history = await getEnrollmentHistory(id, viewer);
+  const history = await getEnrollmentHistory(params.id, viewer);
   if (!history) notFound();
 
   return <main>
@@ -23,10 +24,4 @@ export async function renderEnrollmentPage(id: string, viewer: { id: string; rol
       </article>)}
     </section>)}
   </main>;
-}
-
-export default async function EnrollmentPage({ params }: { params: { id: string } }) {
-  const viewer = await getCurrentUser();
-  if (!viewer) notFound();
-  return renderEnrollmentPage(params.id, viewer);
 }
