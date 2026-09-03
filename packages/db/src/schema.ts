@@ -131,3 +131,21 @@ export const leaderboardSnapshots = pgTable('leaderboard_snapshots', {
   rank: integer('rank').notNull(),
   computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const notifications = pgTable('notifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  eventType: text('event_type').notNull(),
+  payload: jsonb('payload').notNull(),
+  readAt: timestamp('read_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const notificationPreferences = pgTable('notification_preferences', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  eventType: text('event_type').notNull(),
+  emailEnabled: boolean('email_enabled').notNull().default(true),
+}, (table) => ({
+  notificationPreferencesUnique: unique().on(table.userId, table.eventType),
+}));
