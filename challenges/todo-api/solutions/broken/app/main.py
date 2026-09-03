@@ -25,7 +25,7 @@ async def log_requests(request: Request, call_next):
         "path": request.url.path,
         "status": response.status_code,
         "duration_ms": duration_ms,
-    }))
+    }), flush=True)
     return response
 
 
