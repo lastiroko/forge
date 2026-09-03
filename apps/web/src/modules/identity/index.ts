@@ -11,6 +11,25 @@ export type Session = typeof sessions.$inferSelect;
 
 export type Role = 'member' | 'author' | 'admin';
 
+export class AuthorizationError extends Error {
+  readonly status = 403;
+
+  constructor(message = 'Forbidden') {
+    super(message);
+    this.name = 'AuthorizationError';
+  }
+}
+
+const roleRank: Record<Role, number> = {
+  member: 0,
+  author: 1,
+  admin: 2,
+};
+
+function isRole(role: string): role is Role {
+  return Object.prototype.hasOwnProperty.call(roleRank, role);
+}
+
 export const SESSION_COOKIE = 'forge_session';
 
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
@@ -174,6 +193,36 @@ export async function deleteSession(
   }
 }
 
-export async function requireRole(role: Role): Promise<User> {
-  throw new Error('identity.requireRole is not implemented yet');
+export async function requireRole(
+  role: Role,
+  cookieStore: SessionCookieReader = cookies(),
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<User> {
+  const user = await getCurrentUser(cookieStore, databaseUrl);
+  if (!user || !isRole(user.role) || roleRank[user.role] < roleRank[role]) {
+    throw new AuthorizationError();
+  }
+  return user;
+}
+
+export async function changeUserRole(
+  targetUserId: string,
+  role: Role,
+  cookieStore: SessionCookieReader = cookies(),
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<User | undefined> {
+  const actingUser = await requireRole('admin', cookieStore, databaseUrl);
+  if (actingUser.id === targetUserId) throw new AuthorizationError();
+
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [user] = await db
+      .update(users)
+      .set({ role })
+      .where(eq(users.id, targetUserId))
+      .returning();
+    return user;
+  } finally {
+    await pool.end();
+  }
 }
