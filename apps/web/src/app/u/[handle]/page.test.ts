@@ -22,7 +22,10 @@ async function waitForServer(url: string): Promise<void> {
 }
 
 before(async () => {
-  const [user] = await db.insert(users).values({ githubId: 56002, handle: 'public-member', displayName: 'Public Member', email: 'public@example.com', role: 'member' }).returning(); ids.users.push(user.id);
+  const [user] = await db.insert(users).values({
+    githubId: 56002, handle: 'public-member', displayName: 'Public Member', email: 'public@example.com', role: 'member',
+    bio: 'Ships backend APIs for fun.', links: ['https://example.com', 'https://github.com/public-member'],
+  }).returning(); ids.users.push(user.id);
   const completedTitles = ['HTTP Junior Challenge', 'Active Hidden Challenge'];
   const insertedChallenges = await db.insert(challenges).values(completedTitles.map((title) => ({ title, level: 'junior' }))).returning(); ids.challenges.push(...insertedChallenges.map((row) => row.id));
   const insertedVersions = await db.insert(challengeVersions).values(insertedChallenges.map((challenge) => ({ challengeId: challenge.id, version: 1, level: 'junior', rubric: {}, openapiRef: 'api.yaml', hiddenTestsRef: 'tests', publishedAt: new Date() }))).returning(); ids.versions.push(...insertedVersions.map((row) => row.id));
@@ -57,6 +60,9 @@ test('GET /u/:handle publicly shows completed challenge details and solution emp
   assert.equal(response.status, 200);
   for (const content of ['HTTP Junior Challenge', 'TypeScript', 'Fastify', 'backend', '88.5', 'Published solutions', 'No published solutions yet.']) assert.ok(body.includes(content));
   assert.ok(!body.includes('Active Hidden Challenge'));
+  assert.ok(body.includes('Ships backend APIs for fun.'));
+  assert.ok(body.includes('href="https://example.com"'));
+  assert.ok(body.includes('href="https://github.com/public-member"'));
 });
 
 test('GET /u/:handle returns 404 for an unknown handle', async () => {
