@@ -12,7 +12,9 @@ export const users = appSchema.table('users', {
   email: text('email').notNull(),
   role: text('role').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  githubIdUnique: uniqueIndex('users_github_id_unique').on(table.githubId),
+}));
 
 export const sessions = appSchema.table('sessions', {
   id: uuid('id').primaryKey().defaultRandom(),

@@ -120,6 +120,13 @@
       "when": 1788480000000,
       "tag": "0016_unique_points_ledger_grading_run",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788480100000,
+      "tag": "0017_unique_users_github_id",
+      "breakpoints": true
     }
   ]
 }
