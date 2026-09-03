@@ -150,3 +150,13 @@ export const notificationPreferences = pgTable('notification_preferences', {
 }, (table) => ({
   notificationPreferencesUnique: unique().on(table.userId, table.eventType),
 }));
+
+export const auditLog = pgTable('audit_log', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  actorId: uuid('actor_id').references(() => users.id),
+  action: text('action').notNull(),
+  targetType: text('target_type').notNull(),
+  targetId: uuid('target_id').notNull(),
+  reason: text('reason').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
