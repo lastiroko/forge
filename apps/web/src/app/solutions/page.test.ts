@@ -1,15 +1,17 @@
 import { after, before, test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { eq } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import { createSession, SESSION_COOKIE } from '../../modules/identity/index.js';
 import { commentAction } from '../comment-actions.js';
-import { appendComment } from '../Comments.js';
+import { appendComment, Comments, submitComment } from '../Comments.js';
 import type { Comment } from '../../modules/community/index.js';
 
 const {
@@ -52,6 +54,32 @@ async function waitForServer(url: string): Promise<void> {
     try { await fetch(url); return; } catch { await new Promise((resolve) => setTimeout(resolve, 100)); }
   }
   throw new Error(`server at ${url} did not become ready`);
+}
+
+async function findCommentAction(
+  directory: string,
+  candidates: string[],
+): Promise<{ id: string; distance: number } | undefined> {
+  let closest: { id: string; distance: number } | undefined;
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      const nested = await findCommentAction(entryPath, candidates);
+      if (nested && (!closest || nested.distance < closest.distance)) closest = nested;
+    } else if (entry.name.endsWith('.js')) {
+      const source = await readFile(entryPath, 'utf-8');
+      const exportPosition = source.indexOf('Comment cannot be empty.');
+      if (exportPosition !== -1) {
+        for (const id of candidates) {
+          const idPosition = source.indexOf(id);
+          if (idPosition !== -1 && (!closest || Math.abs(idPosition - exportPosition) < closest.distance)) {
+            closest = { id, distance: Math.abs(idPosition - exportPosition) };
+          }
+        }
+      }
+    }
+  }
+  return closest;
 }
 
 before(async () => {
@@ -135,11 +163,11 @@ before(async () => {
     path.join(webRoot, '.next', 'server', 'server-reference-manifest.json'),
     'utf-8',
   )) as { node: Record<string, { workers: Record<string, unknown> }> };
-  const actionIds = Object.entries(actionManifest.node)
+  const pageActionIds = Object.entries(actionManifest.node)
     .filter(([, action]) => Object.hasOwn(action.workers, 'app/solutions/[id]/page'))
     .map(([id]) => id);
-  assert.equal(actionIds.length, 1);
-  [commentActionId] = actionIds;
+  commentActionId = (await findCommentAction(path.join(webRoot, '.next', 'server'), pageActionIds))?.id;
+  assert.ok(commentActionId, 'expected the commentAction export in the solution page manifest');
   server = spawn('node', ['.next/standalone/apps/web/server.js'], {
     cwd: webRoot,
     env: { ...process.env, DATABASE_URL: databaseUrl, PORT: String(port), HOSTNAME: '127.0.0.1' },
@@ -241,6 +269,7 @@ test('comment action authorizes members and inserts trimmed solution and challen
     memberSessionId,
   );
   assert.equal(solutionResponse.status, 200);
+  assert.ok((await solutionResponse.text()).includes(solutionBody));
 
   const challengeResponse = await postCommentAction(
     { type: 'challenge', id: ids.challenges[0] },
@@ -248,6 +277,7 @@ test('comment action authorizes members and inserts trimmed solution and challen
     memberSessionId,
   );
   assert.equal(challengeResponse.status, 200);
+  assert.ok((await challengeResponse.text()).includes(challengeBody));
 
   const inserted = (await db.select().from(comments))
     .filter((row) => row.body === solutionBody || row.body === challengeBody);
@@ -299,4 +329,82 @@ test('appending a returned comment preserves existing comments and places it las
 
   assert.deepEqual(displayed, [existing[0], inserted]);
   assert.notEqual(displayed, existing);
+});
+
+for (const targetType of ['solution', 'challenge'] as const) {
+  test(`successful ${targetType} component submission appends visibly and clears without navigation`, async () => {
+    const existing: Comment[] = [{
+      id: randomUUID(),
+      targetType,
+      targetId: randomUUID(),
+      authorId: randomUUID(),
+      body: 'Already visible',
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    }];
+    const inserted: Comment = {
+      ...existing[0],
+      id: randomUUID(),
+      body: `New ${targetType} comment`,
+      createdAt: new Date('2026-01-02T00:00:00Z'),
+    };
+    let displayed = existing;
+    let draft = `Draft ${targetType} comment`;
+    let failure: string | undefined;
+    let actionCalls = 0;
+    const target = { type: targetType, id: inserted.targetId };
+    const initialMarkup = renderToStaticMarkup(createElement(Comments, {
+      target,
+      initialComments: displayed,
+      isSignedIn: true,
+    }));
+    assert.ok(initialMarkup.includes('Already visible'));
+    assert.ok(!initialMarkup.includes(inserted.body));
+
+    await submitComment(
+      target,
+      draft,
+      async (target, body) => {
+        actionCalls += 1;
+        assert.deepEqual(target, { type: targetType, id: inserted.targetId });
+        assert.equal(body, draft);
+        return inserted;
+      },
+      {
+        append: (comment) => { displayed = appendComment(displayed, comment); },
+        clear: () => { draft = ''; },
+        fail: (message) => { failure = message; },
+      },
+    );
+
+    assert.equal(actionCalls, 1);
+    assert.deepEqual(displayed, [existing[0], inserted]);
+    assert.equal(draft, '');
+    assert.equal(failure, undefined);
+    const updatedMarkup = renderToStaticMarkup(createElement(Comments, {
+      target,
+      initialComments: displayed,
+      isSignedIn: true,
+    }));
+    assert.ok(updatedMarkup.indexOf('Already visible') < updatedMarkup.indexOf(inserted.body));
+    assert.match(updatedMarkup, /<textarea[^>]*><\/textarea>/);
+  });
+}
+
+test('failed component submission retains its draft and exposes the action error', async () => {
+  let draft = 'Keep this draft';
+  let failure: string | undefined;
+
+  await submitComment(
+    { type: 'solution', id: randomUUID() },
+    draft,
+    async () => { throw new Error('Comment cannot be empty.'); },
+    {
+      append: () => assert.fail('a failed submission must not append'),
+      clear: () => { draft = ''; },
+      fail: (message) => { failure = message; },
+    },
+  );
+
+  assert.equal(draft, 'Keep this draft');
+  assert.equal(failure, 'Comment cannot be empty.');
 });

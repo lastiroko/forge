@@ -143,6 +143,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>): Promise<vo
       await db.delete(gradingRuns).where(inArray(gradingRuns.submissionId, submissionIds));
       await db.delete(submissions).where(inArray(submissions.id, submissionIds));
     }
+    if (userIds.length > 0) await db.delete(comments).where(inArray(comments.authorId, userIds));
     if (enrollmentIds.length > 0) await db.delete(enrollments).where(inArray(enrollments.id, enrollmentIds));
     if (challengeVersionId) await db.delete(challengeVersions).where(eq(challengeVersions.id, challengeVersionId));
     if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));

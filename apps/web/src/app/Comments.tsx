@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import type { Comment, CommentTarget } from '../modules/community/index.js';
 import { commentAction } from './comment-actions.js';
 
@@ -14,25 +14,50 @@ export function appendComment(existing: Comment[], inserted: Comment): Comment[]
   return [...existing, inserted];
 }
 
+interface SubmitCommentCallbacks {
+  append(inserted: Comment): void;
+  clear(): void;
+  fail(message: string): void;
+}
+
+export async function submitComment(
+  target: CommentTarget,
+  body: string,
+  action: typeof commentAction,
+  callbacks: SubmitCommentCallbacks,
+): Promise<void> {
+  try {
+    const inserted = await action(target, body);
+    callbacks.append(inserted);
+    callbacks.clear();
+  } catch (reason) {
+    callbacks.fail(reason instanceof Error ? reason.message : 'Unable to post comment.');
+  }
+}
+
 export function Comments({ target, initialComments, isSignedIn }: CommentsProps) {
   const [displayedComments, setDisplayedComments] = useState(initialComments);
   const [body, setBody] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submissionInFlight = useRef(false);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submissionInFlight.current) return;
+    submissionInFlight.current = true;
     setError(null);
-    startTransition(() => {
-      commentAction(target, body)
-        .then((inserted) => {
-          setDisplayedComments((existing) => appendComment(existing, inserted));
-          setBody('');
-        })
-        .catch((reason: unknown) => {
-          setError(reason instanceof Error ? reason.message : 'Unable to post comment.');
-        });
-    });
+    setIsSubmitting(true);
+    try {
+      await submitComment(target, body, commentAction, {
+        append: (inserted) => setDisplayedComments((existing) => appendComment(existing, inserted)),
+        clear: () => setBody(''),
+        fail: setError,
+      });
+    } finally {
+      submissionInFlight.current = false;
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -48,9 +73,9 @@ export function Comments({ target, initialComments, isSignedIn }: CommentsProps)
             id={`comment-${target.type}-${target.id}`}
             value={body}
             onChange={(event) => setBody(event.target.value)}
-            disabled={isPending}
+            disabled={isSubmitting}
           />
-          <button type="submit" disabled={isPending}>Post comment</button>
+          <button type="submit" disabled={isSubmitting}>Post comment</button>
           {error ? <p>{error}</p> : null}
         </form>
       ) : null}
