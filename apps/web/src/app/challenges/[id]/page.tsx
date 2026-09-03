@@ -68,7 +68,7 @@ export default async function ChallengePage({ params }: { params: { id: string }
       <h2>API contract</h2>
       {contract.operations.map((operation) => (
         <section key={`${operation.method}-${operation.path}`}>
-          <h3>{operation.method.toUpperCase()} {operation.path}</h3>
+          <h3>{`${operation.method.toUpperCase()} ${operation.path}`}</h3>
           {operation.summary ? <p>{operation.summary}</p> : null}
           {operation.description ? <p>{operation.description}</p> : null}
           {operation.parameters.length > 0 ? (
