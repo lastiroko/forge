@@ -1,6 +1,7 @@
 import { after, before, test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { createServer, type Server } from 'node:http';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +25,8 @@ const ids: Record<string, string[]> = {
   users: [], sessions: [], challenges: [], versions: [], enrollments: [], submissions: [], runs: [], solutions: [], comments: [], reports: [],
 };
 let server: ChildProcess | undefined;
+let fixtureServer: Server | undefined;
+let fixtureUrl: string | undefined;
 let memberSessionId: string | undefined;
 let memberId: string | undefined;
 let publishedSolutionId: string | undefined;
@@ -55,6 +58,29 @@ async function waitForServer(url: string): Promise<void> {
     try { await fetch(url); return; } catch { await new Promise((resolve) => setTimeout(resolve, 100)); }
   }
   throw new Error(`server at ${url} did not become ready`);
+}
+
+async function startFixtureServer(): Promise<{ server: Server; url: string }> {
+  const yaml = await readFile(
+    path.join(webRoot, 'src', 'app', 'challenges', '[id]', 'fixtures', 'openapi.yaml'),
+    'utf-8',
+  );
+  return new Promise((resolve) => {
+    const httpServer = createServer((req, res) => {
+      if (req.url === '/openapi.yaml') {
+        res.writeHead(200, { 'content-type': 'application/yaml' });
+        res.end(yaml);
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    httpServer.listen(0, '127.0.0.1', () => {
+      const address = httpServer.address();
+      const listenPort = typeof address === 'object' && address ? address.port : 0;
+      resolve({ server: httpServer, url: `http://127.0.0.1:${listenPort}/openapi.yaml` });
+    });
+  });
 }
 
 async function collectCompiledFiles(directory: string): Promise<string[]> {
@@ -103,6 +129,10 @@ async function findActionId(
 }
 
 before(async () => {
+  const fixture = await startFixtureServer();
+  fixtureServer = fixture.server;
+  fixtureUrl = fixture.url;
+
   const [member] = await db.insert(users).values({
     githubId: Math.floor(Math.random() * 1_000_000_000),
     handle: `reporting-member-${randomUUID()}`,
@@ -122,7 +152,7 @@ before(async () => {
   ids.challenges.push(challenge.id);
   challengeId = challenge.id;
   const [version] = await db.insert(challengeVersions).values({
-    challengeId: challenge.id, version: 1, level: 'junior', rubric: {}, openapiRef: 'openapi/v1.yaml', hiddenTestsRef: 'hidden/v1', publishedAt: new Date(),
+    challengeId: challenge.id, version: 1, level: 'junior', rubric: {}, openapiRef: fixtureUrl, hiddenTestsRef: 'hidden/v1', publishedAt: new Date(),
   }).returning();
   ids.versions.push(version.id);
 
@@ -179,6 +209,7 @@ before(async () => {
 
 after(async () => {
   if (server) server.kill();
+  if (fixtureServer) fixtureServer.close();
   for (const id of ids.reports) await db.delete(reports).where(eq(reports.id, id));
   for (const id of ids.comments) await db.delete(comments).where(eq(comments.id, id));
   for (const id of ids.runs) await db.delete(gradingRuns).where(eq(gradingRuns.id, id));
