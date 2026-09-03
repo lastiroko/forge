@@ -2,10 +2,10 @@ import { cookies } from 'next/headers';
 import { asc, desc, eq } from 'drizzle-orm';
 import { createDbClient, getQueue, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
-import { GRADING_TOPIC } from '../grading/index.js';
+import { cancel, GRADING_TOPIC, retry } from '../grading/index.js';
 import { requireRole, type SessionCookieReader } from '../identity/index.js';
 
-const { gradingRuns, workerHeartbeats } = schema;
+const { gradingRuns, workerHeartbeats, auditLog } = schema;
 
 export interface OperationsRun {
   id: string;
@@ -70,5 +70,49 @@ export async function getAdminOperations(
     }
   } finally {
     await boss.stop();
+  }
+}
+
+export async function retryGradingRun(
+  runId: string,
+  cookieStore: SessionCookieReader = cookies(),
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<void> {
+  const admin = await requireRole('admin', cookieStore, databaseUrl);
+  await retry(runId, databaseUrl);
+
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    await db.insert(auditLog).values({
+      actorId: admin.id,
+      action: 'grading_run.retry',
+      targetType: 'grading_run',
+      targetId: runId,
+      reason: 'Admin retried a failed grading run',
+    });
+  } finally {
+    await pool.end();
+  }
+}
+
+export async function cancelGradingRun(
+  runId: string,
+  cookieStore: SessionCookieReader = cookies(),
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<void> {
+  const admin = await requireRole('admin', cookieStore, databaseUrl);
+  await cancel(runId, databaseUrl);
+
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    await db.insert(auditLog).values({
+      actorId: admin.id,
+      action: 'grading_run.cancel',
+      targetType: 'grading_run',
+      targetId: runId,
+      reason: 'Admin cancelled a running grading run',
+    });
+  } finally {
+    await pool.end();
   }
 }

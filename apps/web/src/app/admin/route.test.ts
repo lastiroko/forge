@@ -9,7 +9,7 @@ import { createDbClient, getQueue, schema } from '@forge/db';
 import { GRADING_TOPIC } from '../../modules/grading/index.js';
 import { SESSION_COOKIE } from '../../modules/identity/index.js';
 
-const { users, sessions, enrollments, submissions, gradingRuns, workerHeartbeats } = schema;
+const { users, sessions, enrollments, submissions, gradingRuns, workerHeartbeats, auditLog } = schema;
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
 const port = 3466;
@@ -18,6 +18,7 @@ let boss: Awaited<ReturnType<typeof getQueue>>;
 const ids = { users: [] as string[], sessions: [] as string[], submissions: [] as string[], runs: [] as string[] };
 const enrollmentId = randomUUID();
 const workerId = randomUUID();
+let adminUserId: string;
 let adminSessionId: string;
 let memberSessionId: string;
 let server: ChildProcess | undefined;
@@ -52,6 +53,7 @@ before(async () => {
   }))).returning();
   ids.sessions.push(...seededSessions.map((session) => session.id));
   [adminSessionId, memberSessionId] = seededSessions.map((session) => session.id);
+  adminUserId = seededUsers[0].id;
 
   await db.insert(enrollments).values({ id: enrollmentId, userId: seededUsers[0].id, challengeVersionId: randomUUID(), mode: 'backend', stackId: randomUUID(), status: 'active' });
   for (const fixture of [
@@ -114,5 +116,129 @@ test('GET /admin renders read-only operational data and the exact queue growth',
   assert.match(html, new RegExp(workerId));
   assert.match(html, new RegExp(ids.runs[1]));
   assert.match(html, /seeded-failed-stage/);
-  assert.doesNotMatch(html, /<form|<button|retry|cancel|secret|configuration/i);
+  assert.doesNotMatch(html, /secret|configuration/i);
+  assert.match(html, new RegExp(`name="runId" value="${ids.runs[0]}"[\\s\\S]*?name="action" value="cancel"`));
+  assert.match(html, new RegExp(`name="runId" value="${ids.runs[1]}"[\\s\\S]*?name="action" value="retry"`));
+  assert.doesNotMatch(html, new RegExp(`name="runId" value="${ids.runs[0]}"[\\s\\S]*?name="action" value="retry"`));
+  assert.doesNotMatch(html, new RegExp(`name="runId" value="${ids.runs[1]}"[\\s\\S]*?name="action" value="cancel"`));
+});
+
+test('POST /admin returns 403 to member and anonymous callers without mutating state', async () => {
+  const runId = ids.runs[1];
+  const body = new URLSearchParams({ action: 'retry', runId });
+
+  const anonymous = await fetch(`http://127.0.0.1:${port}/admin`, {
+    method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body,
+  });
+  assert.equal(anonymous.status, 403);
+
+  const member = await fetch(`http://127.0.0.1:${port}/admin`, {
+    method: 'POST',
+    redirect: 'manual',
+    headers: { Cookie: `${SESSION_COOKIE}=${memberSessionId}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  assert.equal(member.status, 403);
+
+  const [run] = await db.select().from(gradingRuns).where(eq(gradingRuns.id, runId));
+  assert.equal(run.status, 'failed');
+  const auditRows = await db.select().from(auditLog).where(eq(auditLog.targetId, runId));
+  assert.equal(auditRows.length, 0);
+});
+
+test('POST /admin rejects malformed action or missing runId with 400', async () => {
+  const headers = { Cookie: `${SESSION_COOKIE}=${adminSessionId}`, 'Content-Type': 'application/x-www-form-urlencoded' };
+
+  const badAction = await fetch(`http://127.0.0.1:${port}/admin`, {
+    method: 'POST', redirect: 'manual', headers, body: new URLSearchParams({ action: 'delete', runId: ids.runs[1] }),
+  });
+  assert.equal(badAction.status, 400);
+
+  const missingRunId = await fetch(`http://127.0.0.1:${port}/admin`, {
+    method: 'POST', redirect: 'manual', headers, body: new URLSearchParams({ action: 'retry' }),
+  });
+  assert.equal(missingRunId.status, 400);
+});
+
+test('POST /admin retry re-enqueues a failed run and records one audit row naming the admin', async () => {
+  const headers = { Cookie: `${SESSION_COOKIE}=${adminSessionId}`, 'Content-Type': 'application/x-www-form-urlencoded' };
+  const submissionId = randomUUID();
+  const runId = randomUUID();
+  let queueJobId: string | null = null;
+  try {
+    await db.insert(submissions).values({ id: submissionId, enrollmentId, commitSha: randomUUID(), status: 'failed' });
+    await db.insert(gradingRuns).values({ id: runId, submissionId, status: 'failed', score: 5 });
+
+    let receivedJob: { runId: string; submissionId: string } | undefined;
+    await boss.work(GRADING_TOPIC, async (job) => {
+      const data = job.data as { runId: string; submissionId: string };
+      if (data.submissionId === submissionId) receivedJob = data;
+    });
+
+    const response = await fetch(`http://127.0.0.1:${port}/admin`, {
+      method: 'POST', redirect: 'manual', headers, body: new URLSearchParams({ action: 'retry', runId }),
+    });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin');
+
+    const deadline = Date.now() + 5_000;
+    while (!receivedJob && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(receivedJob?.submissionId, submissionId);
+    assert.equal(receivedJob?.runId, runId);
+
+    const [run] = await db.select().from(gradingRuns).where(eq(gradingRuns.id, runId));
+    assert.equal(run.status, 'queued');
+    queueJobId = run.queueJobId;
+    const [submission] = await db.select().from(submissions).where(eq(submissions.id, submissionId));
+    assert.equal(submission.status, 'queued');
+
+    const auditRows = await db.select().from(auditLog).where(eq(auditLog.targetId, runId));
+    assert.equal(auditRows.length, 1);
+    assert.equal(auditRows[0].actorId, adminUserId);
+    assert.equal(auditRows[0].action, 'grading_run.retry');
+    assert.equal(auditRows[0].targetType, 'grading_run');
+  } finally {
+    if (queueJobId) await boss.cancel(queueJobId);
+    await db.delete(auditLog).where(eq(auditLog.targetId, runId));
+    await db.delete(gradingRuns).where(eq(gradingRuns.id, runId));
+    await db.delete(submissions).where(eq(submissions.id, submissionId));
+  }
+});
+
+test('POST /admin cancel stops a running run, cancels its queue job, and records one audit row naming the admin', async () => {
+  const headers = { Cookie: `${SESSION_COOKIE}=${adminSessionId}`, 'Content-Type': 'application/x-www-form-urlencoded' };
+  const submissionId = randomUUID();
+  const runId = randomUUID();
+  let queueJobId: string | null = null;
+  try {
+    await db.insert(submissions).values({ id: submissionId, enrollmentId, commitSha: randomUUID(), status: 'running' });
+    queueJobId = await boss.send(GRADING_TOPIC, { runId, submissionId }, { retryLimit: 3 });
+    assert.ok(queueJobId);
+    await db.insert(gradingRuns).values({ id: runId, submissionId, status: 'running', currentStage: 'build', queueJobId });
+
+    const response = await fetch(`http://127.0.0.1:${port}/admin`, {
+      method: 'POST', redirect: 'manual', headers, body: new URLSearchParams({ action: 'cancel', runId }),
+    });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin');
+
+    const [run] = await db.select().from(gradingRuns).where(eq(gradingRuns.id, runId));
+    assert.equal(run.status, 'cancelled');
+    const [submission] = await db.select().from(submissions).where(eq(submissions.id, submissionId));
+    assert.equal(submission.status, 'cancelled');
+
+    const cancelledJob = await boss.getJobById(queueJobId);
+    assert.equal(cancelledJob?.state, 'cancelled');
+
+    const auditRows = await db.select().from(auditLog).where(eq(auditLog.targetId, runId));
+    assert.equal(auditRows.length, 1);
+    assert.equal(auditRows[0].actorId, adminUserId);
+    assert.equal(auditRows[0].action, 'grading_run.cancel');
+    assert.equal(auditRows[0].targetType, 'grading_run');
+  } finally {
+    if (queueJobId) await boss.cancel(queueJobId);
+    await db.delete(auditLog).where(eq(auditLog.targetId, runId));
+    await db.delete(gradingRuns).where(eq(gradingRuns.id, runId));
+    await db.delete(submissions).where(eq(submissions.id, submissionId));
+  }
 });
