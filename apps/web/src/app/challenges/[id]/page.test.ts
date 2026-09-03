@@ -33,7 +33,14 @@ before(async () => {
   const [challenge] = await db.insert(challenges).values({ title: 'Challenge detail page fixture', level: 'mid' }).returning();
   challengeId = challenge.id;
   const [version] = await db.insert(challengeVersions).values({
-    challengeId, version: 1, level: 'mid', rubric: {}, openapiRef: 'openapi/v1.yaml', hiddenTestsRef: 'hidden/v1', publishedAt: new Date('2026-01-01T00:00:00Z'),
+    challengeId,
+    version: 1,
+    level: 'mid',
+    brief: 'Build a small items API with full CRUD.',
+    rubric: { functional: 60, contract: 15, robustness: 15, quality: 10 },
+    openapiRef: 'openapi/v1.yaml',
+    hiddenTestsRef: 'hidden/v1',
+    publishedAt: new Date('2026-01-01T00:00:00Z'),
   }).returning();
   versionId = version.id;
 
@@ -65,4 +72,40 @@ test('GET /challenges/:id shows the challenge and sign-in prompt to a signed-out
 test('GET /challenges/:id returns 404 for an unknown challenge', async () => {
   const res = await fetch(`http://127.0.0.1:${port}/challenges/${randomUUID()}`);
   assert.equal(res.status, 404);
+});
+
+test('GET /challenges/:id shows the brief and the four rubric weights for a published challenge version', async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/challenges/${challengeId}`);
+  const body = await res.text();
+
+  assert.equal(res.status, 200);
+  assert.match(body, /Build a small items API with full CRUD\./);
+  assert.match(body, /<dd>60<\/dd>/);
+  assert.equal((body.match(/<dd>15<\/dd>/g) ?? []).length, 2);
+  assert.match(body, /<dd>10<\/dd>/);
+});
+
+test('GET /challenges/:id returns 404 when the challenge has no published version', async () => {
+  let draftChallengeId: string | undefined;
+  let draftVersionId: string | undefined;
+  try {
+    const [challenge] = await db.insert(challenges).values({ title: 'Draft challenge', level: 'junior' }).returning();
+    draftChallengeId = challenge.id;
+    const [version] = await db.insert(challengeVersions).values({
+      challengeId: draftChallengeId,
+      version: 1,
+      level: 'junior',
+      brief: 'Not visible yet.',
+      rubric: { functional: 60, contract: 15, robustness: 15, quality: 10 },
+      openapiRef: 'openapi/v1.yaml',
+      hiddenTestsRef: 'hidden/v1',
+    }).returning();
+    draftVersionId = version.id;
+
+    const res = await fetch(`http://127.0.0.1:${port}/challenges/${draftChallengeId}`);
+    assert.equal(res.status, 404);
+  } finally {
+    if (draftVersionId) await db.delete(challengeVersions).where(eq(challengeVersions.id, draftVersionId));
+    if (draftChallengeId) await db.delete(challenges).where(eq(challenges.id, draftChallengeId));
+  }
 });

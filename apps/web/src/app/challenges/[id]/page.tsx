@@ -1,13 +1,23 @@
 import { notFound } from 'next/navigation';
-import { getChallenge, getEnabledStacks } from '../../../modules/catalogue/index.js';
+import { getChallenge, getEnabledStacks, getLatestPublishedVersion } from '../../../modules/catalogue/index.js';
 import { getCurrentUser } from '../../../modules/identity/index.js';
 import { StartChallengeFlow } from './StartChallengeFlow.js';
 
 export const revalidate = 60;
 
+interface RubricWeights {
+  functional: number;
+  contract: number;
+  robustness: number;
+  quality: number;
+}
+
 export default async function ChallengePage({ params }: { params: { id: string } }) {
   const challenge = await getChallenge(params.id);
   if (!challenge) notFound();
+  const version = await getLatestPublishedVersion(params.id);
+  if (!version) notFound();
+  const rubric = version.rubric as RubricWeights;
   const enabledStacks = await getEnabledStacks(params.id);
 
   let user;
@@ -22,6 +32,18 @@ export default async function ChallengePage({ params }: { params: { id: string }
     <main>
       <h1>{challenge.title}</h1>
       <p>{challenge.level}</p>
+      <pre>{version.brief}</pre>
+      <h2>Rubric weights</h2>
+      <dl>
+        <dt>Functional</dt>
+        <dd>{rubric.functional}</dd>
+        <dt>Contract</dt>
+        <dd>{rubric.contract}</dd>
+        <dt>Robustness</dt>
+        <dd>{rubric.robustness}</dd>
+        <dt>Quality</dt>
+        <dd>{rubric.quality}</dd>
+      </dl>
       {user ? (
         <StartChallengeFlow
           challengeId={challenge.id}
