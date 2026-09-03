@@ -1,4 +1,5 @@
-import type { GitHubIdentity, User } from '../../../../modules/identity/index.js';
+import type { GitHubIdentity, Session, User } from '../../../../modules/identity/index.js';
+import { SESSION_COOKIE, SESSION_TTL_SECONDS } from '../../../../modules/identity/index.js';
 import { STATE_COOKIE } from '../handler.js';
 
 export interface GithubCallbackDependencies {
@@ -6,6 +7,7 @@ export interface GithubCallbackDependencies {
   clientSecret: string | undefined;
   fetch: typeof fetch;
   upsertUser(identity: GitHubIdentity): Promise<User>;
+  createSession(userId: string): Promise<Session>;
 }
 
 function cookieValue(request: Request, name: string): string | undefined {
@@ -113,14 +115,13 @@ export function createGithubCallbackHandler(dependencies: GithubCallbackDependen
       return providerFailure();
     }
 
-    await dependencies.upsertUser(identity);
+    const user = await dependencies.upsertUser(identity);
+    const session = await dependencies.createSession(user.id);
 
-    return new Response(null, {
-      status: 302,
-      headers: {
-        Location: new URL('/', requestUrl.origin).toString(),
-        'Set-Cookie': `${STATE_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${requestUrl.protocol === 'https:' ? '; Secure' : ''}`,
-      },
-    });
+    const headers = new Headers({ Location: new URL('/', requestUrl.origin).toString() });
+    headers.append('Set-Cookie', `${STATE_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${requestUrl.protocol === 'https:' ? '; Secure' : ''}`);
+    headers.append('Set-Cookie', `${SESSION_COOKIE}=${session.id}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL_SECONDS}`);
+
+    return new Response(null, { status: 302, headers });
   };
 }
