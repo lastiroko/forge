@@ -56,30 +56,49 @@ async function waitForServer(url: string): Promise<void> {
   throw new Error(`server at ${url} did not become ready`);
 }
 
-async function findCommentAction(
-  directory: string,
-  candidates: string[],
-): Promise<{ id: string; distance: number } | undefined> {
-  let closest: { id: string; distance: number } | undefined;
+async function collectCompiledFiles(directory: string): Promise<string[]> {
+  const files: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const entryPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      const nested = await findCommentAction(entryPath, candidates);
-      if (nested && (!closest || nested.distance < closest.distance)) closest = nested;
-    } else if (entry.name.endsWith('.js')) {
-      const source = await readFile(entryPath, 'utf-8');
-      const exportPosition = source.indexOf('Comment cannot be empty.');
-      if (exportPosition !== -1) {
-        for (const id of candidates) {
-          const idPosition = source.indexOf(id);
-          if (idPosition !== -1 && (!closest || Math.abs(idPosition - exportPosition) < closest.distance)) {
-            closest = { id, distance: Math.abs(idPosition - exportPosition) };
-          }
+    if (entry.isDirectory()) files.push(...(await collectCompiledFiles(entryPath)));
+    else if (entry.name.endsWith('.js')) files.push(entryPath);
+  }
+  return files;
+}
+
+// The Next.js action-entry loader emits `'<id>': () => import(...).then(mod => mod["<exportName>"])`
+// for every server action, so the export name always appears inside that id's own map entry
+// (the span up to the next id in the source). Anchoring on the export name there is deterministic,
+// unlike matching against a string that only happens to live somewhere in the action's compiled body.
+async function findActionId(
+  directory: string,
+  candidates: string[],
+  exportName: string,
+): Promise<string | undefined> {
+  const exportPattern = new RegExp(`[.[]["']?${exportName}\\b`);
+  for (const filePath of await collectCompiledFiles(directory)) {
+    const source = await readFile(filePath, 'utf-8');
+    const occurrences = candidates
+      .flatMap((id) => {
+        const positions: { id: string; pos: number }[] = [];
+        let from = 0;
+        let index = source.indexOf(id, from);
+        while (index !== -1) {
+          positions.push({ id, pos: index });
+          from = index + id.length;
+          index = source.indexOf(id, from);
         }
-      }
+        return positions;
+      })
+      .sort((a, b) => a.pos - b.pos);
+    for (let i = 0; i < occurrences.length; i += 1) {
+      const { id, pos } = occurrences[i];
+      const next = occurrences[i + 1]?.pos ?? pos + 500;
+      const segment = source.slice(pos, Math.min(next, pos + 500));
+      if (exportPattern.test(segment)) return id;
     }
   }
-  return closest;
+  return undefined;
 }
 
 before(async () => {
@@ -166,7 +185,7 @@ before(async () => {
   const pageActionIds = Object.entries(actionManifest.node)
     .filter(([, action]) => Object.hasOwn(action.workers, 'app/solutions/[id]/page'))
     .map(([id]) => id);
-  commentActionId = (await findCommentAction(path.join(webRoot, '.next', 'server'), pageActionIds))?.id;
+  commentActionId = await findActionId(path.join(webRoot, '.next', 'server'), pageActionIds, 'commentAction');
   assert.ok(commentActionId, 'expected the commentAction export in the solution page manifest');
   server = spawn('node', ['.next/standalone/apps/web/server.js'], {
     cwd: webRoot,
