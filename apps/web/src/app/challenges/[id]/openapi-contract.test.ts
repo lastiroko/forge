@@ -1,6 +1,5 @@
-import { after, before, test } from 'node:test';
+import { test, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { randomUUID } from 'node:crypto';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -13,7 +12,7 @@ const { challenges, challengeVersions } = schema;
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(testDir, '..', '..', '..', '..');
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
-const port = 3418;
+const port = 3422;
 const { db, pool } = createDbClient(databaseUrl);
 
 let challengeId: string | undefined;
@@ -59,7 +58,7 @@ before(async () => {
   fixtureServer = fixture.server;
   fixtureUrl = fixture.url;
 
-  const [challenge] = await db.insert(challenges).values({ title: 'Challenge detail page fixture', level: 'mid' }).returning();
+  const [challenge] = await db.insert(challenges).values({ title: 'OpenAPI contract fixture challenge', level: 'mid' }).returning();
   challengeId = challenge.id;
   const [version] = await db.insert(challengeVersions).values({
     challengeId,
@@ -89,53 +88,47 @@ after(async () => {
   await pool.end();
 });
 
-test('GET /challenges/:id shows the challenge and sign-in prompt to a signed-out visitor', async () => {
+test('GET /challenges/:id renders every path and method from the OpenAPI fixture', async () => {
   const res = await fetch(`http://127.0.0.1:${port}/challenges/${challengeId}`);
   const body = await res.text();
 
   assert.equal(res.status, 200);
-  assert.ok(body.includes('Challenge detail page fixture'));
-  assert.ok(body.includes('Sign in with GitHub to start this challenge.'));
-  assert.ok(!body.includes('Start challenge'));
+  assert.match(body, /API contract/);
+
+  assert.match(body, /GET\s*\/items(?!\/)/);
+  assert.match(body, /POST\s*\/items(?!\/)/);
+  assert.match(body, /GET\s*\/items\/\{itemId\}/);
+  assert.match(body, /DELETE\s*\/items\/\{itemId\}/);
 });
 
-test('GET /challenges/:id returns 404 for an unknown challenge', async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/challenges/${randomUUID()}`);
-  assert.equal(res.status, 404);
-});
-
-test('GET /challenges/:id shows the brief and the four rubric weights for a published challenge version', async () => {
+test('GET /challenges/:id shows readable parameter, request-body, and response details', async () => {
   const res = await fetch(`http://127.0.0.1:${port}/challenges/${challengeId}`);
   const body = await res.text();
 
   assert.equal(res.status, 200);
-  assert.match(body, /Build a small items API with full CRUD\./);
-  assert.match(body, /<dd>60<\/dd>/);
-  assert.equal((body.match(/<dd>15<\/dd>/g) ?? []).length, 2);
-  assert.match(body, /<dd>10<\/dd>/);
+
+  assert.match(body, /limit/);
+  assert.match(body, /query/);
+  assert.match(body, /itemId/);
+  assert.match(body, /path/);
+
+  assert.match(body, /201/);
+  assert.match(body, /404/);
+  assert.match(body, /Item not found/);
+
+  assert.match(body, /tags/);
+  assert.match(body, /array/);
+
+  assert.match(body, /name/);
+  assert.match(body, /description/);
 });
 
-test('GET /challenges/:id returns 404 when the challenge has no published version', async () => {
-  let draftChallengeId: string | undefined;
-  let draftVersionId: string | undefined;
-  try {
-    const [challenge] = await db.insert(challenges).values({ title: 'Draft challenge', level: 'junior' }).returning();
-    draftChallengeId = challenge.id;
-    const [version] = await db.insert(challengeVersions).values({
-      challengeId: draftChallengeId,
-      version: 1,
-      level: 'junior',
-      brief: 'Not visible yet.',
-      rubric: { functional: 60, contract: 15, robustness: 15, quality: 10 },
-      openapiRef: 'openapi/v1.yaml',
-      hiddenTestsRef: 'hidden/v1',
-    }).returning();
-    draftVersionId = version.id;
+test('GET /challenges/:id does not render the OpenAPI contract as raw YAML', async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/challenges/${challengeId}`);
+  const body = await res.text();
 
-    const res = await fetch(`http://127.0.0.1:${port}/challenges/${draftChallengeId}`);
-    assert.equal(res.status, 404);
-  } finally {
-    if (draftVersionId) await db.delete(challengeVersions).where(eq(challengeVersions.id, draftVersionId));
-    if (draftChallengeId) await db.delete(challenges).where(eq(challenges.id, draftChallengeId));
-  }
+  assert.equal(res.status, 200);
+  assert.ok(!body.includes('openapi: 3.0.3'));
+  assert.ok(!body.includes('components:'));
+  assert.ok(!body.includes('$ref:'));
 });

@@ -1,5 +1,11 @@
 import { notFound } from 'next/navigation';
-import { getChallenge, getEnabledStacks, getLatestPublishedVersion } from '../../../modules/catalogue/index.js';
+import {
+  getChallenge,
+  getEnabledStacks,
+  getLatestPublishedVersion,
+  loadOpenApiContract,
+  type OpenApiSchemaShape,
+} from '../../../modules/catalogue/index.js';
 import { getCurrentUser } from '../../../modules/identity/index.js';
 import { StartChallengeFlow } from './StartChallengeFlow.js';
 
@@ -12,6 +18,20 @@ interface RubricWeights {
   quality: number;
 }
 
+function describeSchemaShape(shape: OpenApiSchemaShape): string {
+  const suffix = shape.nullable ? ' | null' : '';
+  if (shape.type === 'array') {
+    return `array<${shape.items ? describeSchemaShape(shape.items) : 'unknown'}>${suffix}`;
+  }
+  if (shape.type === 'object') {
+    const properties = (shape.properties ?? [])
+      .map((property) => `${property.name}${property.required ? '' : '?'}: ${describeSchemaShape(property.schema)}`)
+      .join(', ');
+    return `object { ${properties} }${suffix}`;
+  }
+  return `${shape.type}${shape.format ? ` (${shape.format})` : ''}${suffix}`;
+}
+
 export default async function ChallengePage({ params }: { params: { id: string } }) {
   const challenge = await getChallenge(params.id);
   if (!challenge) notFound();
@@ -19,6 +39,7 @@ export default async function ChallengePage({ params }: { params: { id: string }
   if (!version) notFound();
   const rubric = version.rubric as RubricWeights;
   const enabledStacks = await getEnabledStacks(params.id);
+  const contract = await loadOpenApiContract(version.openapiRef);
 
   let user;
   try {
@@ -44,6 +65,60 @@ export default async function ChallengePage({ params }: { params: { id: string }
         <dt>Quality</dt>
         <dd>{rubric.quality}</dd>
       </dl>
+      <h2>API contract</h2>
+      {contract.operations.map((operation) => (
+        <section key={`${operation.method}-${operation.path}`}>
+          <h3>{`${operation.method.toUpperCase()} ${operation.path}`}</h3>
+          {operation.summary ? <p>{operation.summary}</p> : null}
+          {operation.description ? <p>{operation.description}</p> : null}
+          {operation.parameters.length > 0 ? (
+            <>
+              <h4>Parameters</h4>
+              <ul>
+                {operation.parameters.map((parameter) => (
+                  <li key={`${parameter.in}-${parameter.name}`}>
+                    <code>{parameter.name}</code> ({parameter.in}, {parameter.required ? 'required' : 'optional'})
+                    {parameter.schema ? `: ${describeSchemaShape(parameter.schema)}` : null}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          {operation.requestBody ? (
+            <>
+              <h4>Request body</h4>
+              <p>{operation.requestBody.required ? 'Required' : 'Optional'}</p>
+              <ul>
+                {operation.requestBody.content.map((media) => (
+                  <li key={media.contentType}>
+                    <dl>
+                      <dt>{media.contentType}</dt>
+                      <dd>{media.schema ? describeSchemaShape(media.schema) : 'No schema'}</dd>
+                    </dl>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          <h4>Responses</h4>
+          <ul>
+            {operation.responses.map((response) => (
+              <li key={response.status}>
+                <dl>
+                  <dt>{response.status}{response.description ? ` ${response.description}` : ''}</dt>
+                  <dd>
+                    {response.content.length > 0
+                      ? response.content
+                          .map((media) => `${media.contentType}: ${media.schema ? describeSchemaShape(media.schema) : 'No schema'}`)
+                          .join('; ')
+                      : 'No content'}
+                  </dd>
+                </dl>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
       {user ? (
         <StartChallengeFlow
           challengeId={challenge.id}
