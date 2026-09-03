@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "publish:challenge": "npm run publish:challenge -w @forge/worker --",
     "test": "tsx --test *.test.ts"
   },
   "devDependencies": {
