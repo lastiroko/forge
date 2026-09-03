@@ -20,6 +20,7 @@ const {
   notifications, notificationPreferences,
 } = schema;
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
+const mailTransport = { sendMail: async () => undefined };
 
 interface Fixture {
   db: ReturnType<typeof createDbClient>['db'];
@@ -194,7 +195,7 @@ test('markRead marks only requested ids owned by the supplied user', async () =>
 test('notifyRunCompleted resolves the enrollment owner and creates one unread grading_finished row', async () => {
   await withFixture(async ({ owner, createRun }) => {
     const { runId } = await createRun('successful', 92);
-    const created = await notifyRunCompleted({ id: runId, score: 92 }, databaseUrl);
+    const created = await notifyRunCompleted({ id: runId, score: 92 }, databaseUrl, mailTransport);
 
     assert.equal(created.userId, owner.id);
     assert.equal(created.eventType, GRADING_FINISHED_EVENT);
@@ -214,6 +215,7 @@ test('notifyCommentReceived resolves the solution owner and creates one unread c
     const created = await notifyCommentReceived(
       { id: commentId, targetType: 'solution', targetId: solutionId, authorId: other.id, body: 'Great work' },
       databaseUrl,
+      mailTransport,
     );
 
     assert.ok(created);
@@ -229,6 +231,7 @@ test('notifyCommentReceived ignores challenge comments and self-comments', async
     const challengeResult = await notifyCommentReceived(
       { id: randomUUID(), targetType: 'challenge', targetId: challengeId, authorId: owner.id, body: 'Challenge feedback' },
       databaseUrl,
+      mailTransport,
     );
     assert.equal(challengeResult, undefined);
 
@@ -236,6 +239,7 @@ test('notifyCommentReceived ignores challenge comments and self-comments', async
     const selfResult = await notifyCommentReceived(
       { id: commentId, targetType: 'solution', targetId: solutionId, authorId: owner.id, body: 'Self comment' },
       databaseUrl,
+      mailTransport,
     );
     assert.equal(selfResult, undefined);
   });

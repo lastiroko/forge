@@ -1,5 +1,4 @@
 import { cookies } from 'next/headers';
-import type { SessionCookieReader } from '../../../modules/identity/index.js';
 import { requireRole } from '../../../modules/identity/index.js';
 import {
   EMAIL_PREFERENCES,
@@ -7,12 +6,9 @@ import {
 } from '../../../modules/notifications/index.js';
 import { saveNotificationPreferencesAction } from './actions.js';
 
-export async function AccountSettingsPage(
-  cookieStore: SessionCookieReader = cookies(),
-  databaseUrl?: string,
-) {
-  const user = await requireRole('member', cookieStore, databaseUrl);
-  const persisted = await preferences(user, databaseUrl);
+export default async function Page() {
+  const user = await requireRole('member', cookies());
+  const persisted = await preferences(user);
   const enabled = new Map(persisted.map((preference) => [preference.eventType, preference.emailEnabled]));
 
   return (
@@ -34,5 +30,3 @@ export async function AccountSettingsPage(
     </main>
   );
 }
-
-export default AccountSettingsPage;
