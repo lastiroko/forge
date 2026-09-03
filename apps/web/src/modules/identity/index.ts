@@ -8,6 +8,39 @@ export type User = typeof users.$inferSelect;
 
 export type Role = 'member' | 'author' | 'admin';
 
+export interface GitHubIdentity {
+  githubId: number;
+  handle: string;
+  displayName: string;
+  avatarUrl: string | null;
+  email: string;
+}
+
+export async function upsertGithubUser(
+  identity: GitHubIdentity,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<User> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [user] = await db
+      .insert(users)
+      .values({ ...identity, role: 'member' })
+      .onConflictDoUpdate({
+        target: users.githubId,
+        set: {
+          handle: identity.handle,
+          displayName: identity.displayName,
+          avatarUrl: identity.avatarUrl,
+          email: identity.email,
+        },
+      })
+      .returning();
+    return user;
+  } finally {
+    await pool.end();
+  }
+}
+
 export interface CompletedChallenge {
   title: string;
   language: string;
