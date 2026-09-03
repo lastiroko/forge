@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 import { buildAccountExport } from '../../../modules/account-export/index.js';
 import { AccountExportSizeError } from '../../../modules/grading/index.js';
 import { AuthorizationError, type User } from '../../../modules/identity/index.js';
-import { createAccountExportHandler } from './route.js';
+import { createAccountExportHandler } from './handler.js';
 
 const user = {
   id: 'member-1', githubId: 1, handle: 'member', displayName: 'Member', avatarUrl: null,
