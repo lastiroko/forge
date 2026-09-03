@@ -4,9 +4,9 @@ import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { eq } from 'drizzle-orm';
 import { createDbClient, getQueue, schema } from '@forge/db';
-import { createServer, GRADING_COMPLETED_TOPIC, registerWorker } from './server.js';
+import { createServer, GRADING_COMPLETED_TOPIC, registerWorker, startWorkerHeartbeat } from './server.js';
 
-const { enrollments, submissions, gradingRuns } = schema;
+const { enrollments, submissions, gradingRuns, workerHeartbeats } = schema;
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://forge:forge@postgres:5432/forge';
 
 test('GET /health returns 200 with {"status":"ok"}', async () => {
@@ -35,6 +35,39 @@ test('unknown route returns 404', async () => {
     assert.deepEqual(body, { error: 'not found' });
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test('worker heartbeat lifecycle persists heartbeats until cleanup', async () => {
+  const { db, pool } = createDbClient(databaseUrl);
+  const workerId = randomUUID();
+  const stopHeartbeat = startWorkerHeartbeat(databaseUrl, 20, workerId);
+  try {
+    let initial: typeof workerHeartbeats.$inferSelect | undefined;
+    for (let attempt = 0; attempt < 50 && !initial; attempt += 1) {
+      [initial] = await db.select().from(workerHeartbeats).where(eq(workerHeartbeats.workerId, workerId));
+      if (!initial) await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(initial);
+
+    let advanced: typeof workerHeartbeats.$inferSelect | undefined;
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      [advanced] = await db.select().from(workerHeartbeats).where(eq(workerHeartbeats.workerId, workerId));
+      if (advanced && advanced.lastHeartbeatAt.getTime() > initial.lastHeartbeatAt.getTime()) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(advanced);
+    assert.ok(advanced.lastHeartbeatAt.getTime() > initial.lastHeartbeatAt.getTime());
+
+    await stopHeartbeat();
+    const stoppedAt = advanced.lastHeartbeatAt.getTime();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const [afterCleanup] = await db.select().from(workerHeartbeats).where(eq(workerHeartbeats.workerId, workerId));
+    assert.equal(afterCleanup.lastHeartbeatAt.getTime(), stoppedAt);
+  } finally {
+    await stopHeartbeat();
+    await db.delete(workerHeartbeats).where(eq(workerHeartbeats.workerId, workerId));
+    await pool.end();
   }
 });
 

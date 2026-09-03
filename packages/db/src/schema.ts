@@ -102,6 +102,12 @@ export const gradingRuns = pgTable('grading_runs', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const workerHeartbeats = pgTable('worker_heartbeats', {
+  workerId: uuid('worker_id').primaryKey(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  lastHeartbeatAt: timestamp('last_heartbeat_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const solutions = pgTable('solutions', {
   id: uuid('id').primaryKey().defaultRandom(),
   submissionId: uuid('submission_id').notNull().references(() => submissions.id),
