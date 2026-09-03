@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import {
-  COMMENT_RECEIVED_EVENT,
-  GRADING_FINISHED_EVENT,
-  type Notification,
-} from '../modules/notifications/index.js';
+import type { Notification } from '../modules/notifications/index.js';
 import { markNotificationsReadAction } from './notifications-actions.js';
+
+// Mirrors GRADING_FINISHED_EVENT / COMMENT_RECEIVED_EVENT from the notifications module.
+// Defined locally (not imported) so this client component never pulls in that module's
+// server-only exports (createDbClient -> @forge/db -> pg), which would break the browser build.
+const GRADING_FINISHED_EVENT = 'grading_finished';
+const COMMENT_RECEIVED_EVENT = 'comment_received';
 
 interface NotificationListProps {
   initialNotifications: Notification[];
