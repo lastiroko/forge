@@ -99,6 +99,13 @@
       "when": 1788506954586,
       "tag": "0013_audit_log",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788507054586,
+      "tag": "0014_challenge_version_immutability",
+      "breakpoints": true
     }
   ]
 }
