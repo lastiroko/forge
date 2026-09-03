@@ -127,6 +127,23 @@ test('retryGradingRun and cancelGradingRun require the admin role, validate run 
 
     await assert.rejects(() => retryGradingRun(runningRun.id, cookieStore(adminSessionId), databaseUrl), /is not failed/);
 
+    // Cancel before registering the retry observer. A pg-boss worker subscribed
+    // to the shared grading topic would otherwise fetch and complete this job,
+    // leaving nothing for the cancellation path to cancel.
+    await cancelGradingRun(runningRun.id, cookieStore(adminSessionId), databaseUrl);
+    const [cancelledRun] = await db.select().from(gradingRuns).where(eq(gradingRuns.id, runningRun.id));
+    assert.equal(cancelledRun.status, 'cancelled');
+    const [cancelledSubmission] = await db.select().from(submissions).where(eq(submissions.id, runningSubmission.id));
+    assert.equal(cancelledSubmission.status, 'cancelled');
+    const cancelledJob = await boss.getJobById(cancelJobId);
+    assert.equal(cancelledJob?.state, 'cancelled');
+
+    const cancelAuditRows = await auditRowsFor(runningRun.id);
+    assert.equal(cancelAuditRows.length, 1);
+    assert.equal(cancelAuditRows[0].actorId, adminUserId);
+    assert.equal(cancelAuditRows[0].action, 'grading_run.cancel');
+    assert.equal(cancelAuditRows[0].targetType, 'grading_run');
+
     let receivedJob: { runId: string; submissionId: string } | undefined;
     await boss.work(GRADING_TOPIC, async (job) => {
       const data = job.data as { runId: string; submissionId: string };
@@ -152,20 +169,6 @@ test('retryGradingRun and cancelGradingRun require the admin role, validate run 
     assert.equal(retryAuditRows[0].targetType, 'grading_run');
 
     await assert.rejects(() => cancelGradingRun(failedRun.id, cookieStore(adminSessionId), databaseUrl), /is not running/);
-
-    await cancelGradingRun(runningRun.id, cookieStore(adminSessionId), databaseUrl);
-    const [cancelledRun] = await db.select().from(gradingRuns).where(eq(gradingRuns.id, runningRun.id));
-    assert.equal(cancelledRun.status, 'cancelled');
-    const [cancelledSubmission] = await db.select().from(submissions).where(eq(submissions.id, runningSubmission.id));
-    assert.equal(cancelledSubmission.status, 'cancelled');
-    const cancelledJob = await boss.getJobById(cancelJobId);
-    assert.equal(cancelledJob?.state, 'cancelled');
-
-    const cancelAuditRows = await auditRowsFor(runningRun.id);
-    assert.equal(cancelAuditRows.length, 1);
-    assert.equal(cancelAuditRows[0].actorId, adminUserId);
-    assert.equal(cancelAuditRows[0].action, 'grading_run.cancel');
-    assert.equal(cancelAuditRows[0].targetType, 'grading_run');
   } finally {
     if (runIds.length) await db.delete(auditLog).where(inArray(auditLog.targetId, runIds));
     if (retryJobId) await boss.cancel(retryJobId);
