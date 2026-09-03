@@ -1,3 +1,4 @@
+import React from 'react';
 import { notFound } from 'next/navigation';
 import { getCurrentUser, type User } from '../../../modules/identity/index.js';
 import { getLatestGradingStatus, getSubmissionForUser } from '../../../modules/submissions/index.js';

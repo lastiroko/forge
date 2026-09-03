@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import type { User } from '../../../../modules/identity/index.js';
-import { createGetHandler, GET } from './route.js';
+import { createGetHandler } from './handler.js';
+import { GET } from './route.js';
 
 const { enrollments, submissions, gradingRuns } = schema;
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { GradingStatusSnapshot } from '../../../modules/submissions/index.js';
 
 export function SubmissionStatus({
