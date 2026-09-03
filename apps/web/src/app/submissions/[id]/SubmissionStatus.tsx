@@ -37,9 +37,9 @@ export function SubmissionStatus({
 }
 
 interface StatusEventSource {
-  addEventListener(type: string, listener: (event: MessageEvent<string>) => void): void;
+  addEventListener(type: string, listener: (event: Event) => void): void;
   close(): void;
-  onerror: (() => void) | null;
+  onerror: ((event: Event) => void) | null;
 }
 
 export function subscribeToSubmissionStatus(
@@ -50,7 +50,7 @@ export function subscribeToSubmissionStatus(
 ): () => void {
   const source = createSource(`/submissions/${submissionId}/events`);
   source.addEventListener('status', (event) => {
-    const next = JSON.parse(event.data) as GradingStatusSnapshot;
+    const next = JSON.parse((event as MessageEvent<string>).data) as GradingStatusSnapshot;
     onStatus(next);
     if (next.status === 'successful' || next.status === 'failed') source.close();
   });

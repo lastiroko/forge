@@ -66,13 +66,13 @@ test('submission page rejects a user who does not own the enrollment', async () 
 });
 
 test('live status subscription targets this submission and applies stage and score events without navigation', () => {
-  let listener: ((event: MessageEvent<string>) => void) | undefined;
+  let listener: ((event: Event) => void) | undefined;
   let openedUrl: string | undefined;
   let closeCalls = 0;
   const received: Array<{ currentStage: string | null; score: number | null }> = [];
   const source = {
-    onerror: null as (() => void) | null,
-    addEventListener(type: string, next: (event: MessageEvent<string>) => void) {
+    onerror: null as ((event: Event) => void) | null,
+    addEventListener(type: string, next: (event: Event) => void) {
       assert.equal(type, 'status');
       listener = next;
     },
