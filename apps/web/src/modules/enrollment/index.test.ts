@@ -3,7 +3,44 @@ import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
-import { abandon, getEnrollment, InvalidCombinationError, startChallenge } from './index.js';
+import type { GitHubRepositoryClient, ZipStorage } from '../kit-generator/index.js';
+import {
+  abandon,
+  attachRepositoryUrl,
+  getEnrollment,
+  InvalidCombinationError,
+  InvalidRepositoryUrlError,
+  startChallenge,
+  type StartChallengeDependencies,
+} from './index.js';
+
+const failingGithubClient: GitHubRepositoryClient = {
+  async createRepository() {
+    throw new Error('GitHub is unavailable in tests');
+  },
+};
+
+const fakeZipStorage: ZipStorage = {
+  async upload(key: string) {
+    return `https://storage.example.com/${key}`;
+  },
+};
+
+const fallbackDependencies: StartChallengeDependencies = {
+  githubClient: failingGithubClient,
+  zipStorage: fakeZipStorage,
+  buildStarterFiles: () => ({ 'README.md': 'stub starter kit' }),
+};
+
+const succeedingDependencies: StartChallengeDependencies = {
+  githubClient: {
+    async createRepository() {
+      return 'https://github.com/example/generated-repo';
+    },
+  },
+  zipStorage: fakeZipStorage,
+  buildStarterFiles: () => ({ 'README.md': 'stub starter kit' }),
+};
 
 const { users, challenges, challengeVersions, stacks, challengeStacks, enrollments } = schema;
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
@@ -61,32 +98,32 @@ after(async () => {
 });
 
 test('startChallenge creates an active enrollment for the latest published version', async () => {
-  const result = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl);
-  enrollmentId = result.id;
-  assert.equal(result.challengeVersionId, latestVersionId);
-  assert.equal(result.status, 'active');
-  assert.equal(result.repoUrl, null);
+  const result = await startChallenge(userId, challengeId, 'backend', enabledStackId, fallbackDependencies, databaseUrl);
+  enrollmentId = result.enrollment.id;
+  assert.equal(result.enrollment.challengeVersionId, latestVersionId);
+  assert.equal(result.enrollment.status, 'active');
+  assert.equal(result.enrollment.repoUrl, null);
 });
 
 test('startChallenge rejects a stack not enabled for the challenge', async () => {
   await assert.rejects(
-    startChallenge(userId, challengeId, 'backend', disabledStackId, databaseUrl),
+    startChallenge(userId, challengeId, 'backend', disabledStackId, fallbackDependencies, databaseUrl),
     InvalidCombinationError,
   );
 });
 
 test('startChallenge rejects a mode not enabled for the challenge', async () => {
   await assert.rejects(
-    startChallenge(userId, disabledModeChallengeId, 'fullstack', enabledStackId, databaseUrl),
+    startChallenge(userId, disabledModeChallengeId, 'fullstack', enabledStackId, fallbackDependencies, databaseUrl),
     InvalidCombinationError,
   );
 });
 
 test('startChallenge reuses the active enrollment for the user and challenge', async () => {
-  const first = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl);
-  const second = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl);
-  enrollmentId = first.id;
-  assert.equal(second.id, first.id);
+  const first = await startChallenge(userId, challengeId, 'backend', enabledStackId, fallbackDependencies, databaseUrl);
+  const second = await startChallenge(userId, challengeId, 'backend', enabledStackId, fallbackDependencies, databaseUrl);
+  enrollmentId = first.enrollment.id;
+  assert.equal(second.enrollment.id, first.enrollment.id);
 });
 
 test('getEnrollment returns a row by id and undefined for an unknown id', async () => {
@@ -103,10 +140,79 @@ test('abandon marks the active enrollment as abandoned', async () => {
 });
 
 test('startChallenge creates a new enrollment after the previous one was abandoned', async () => {
-  const result = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl);
-  assert.notEqual(result.id, enrollmentId);
-  assert.equal(result.status, 'active');
-  enrollmentId = result.id;
+  const result = await startChallenge(userId, challengeId, 'backend', enabledStackId, fallbackDependencies, databaseUrl);
+  assert.notEqual(result.enrollment.id, enrollmentId);
+  assert.equal(result.enrollment.status, 'active');
+  enrollmentId = result.enrollment.id;
+});
+
+test('startChallenge falls back to a zip download when the GitHub client fails', async () => {
+  const result = await startChallenge(userId, challengeId, 'backend', enabledStackId, fallbackDependencies, databaseUrl);
+  assert.equal(result.enrollment.status, 'active');
+  assert.equal(result.repoUrl, null);
+  assert.equal(result.enrollment.repoUrl, null);
+  assert.match(result.downloadUrl ?? '', /^https:\/\//);
+});
+
+test('startChallenge persists the repository URL when GitHub creation succeeds', async () => {
+  const result = await abandon(enrollmentId, databaseUrl);
+  assert.equal(result?.status, 'abandoned');
+
+  const started = await startChallenge(userId, challengeId, 'backend', enabledStackId, succeedingDependencies, databaseUrl);
+  enrollmentId = started.enrollment.id;
+  assert.equal(started.repoUrl, 'https://github.com/example/generated-repo');
+  assert.equal(started.downloadUrl, null);
+  assert.equal(started.enrollment.repoUrl, 'https://github.com/example/generated-repo');
+
+  const reloaded = await getEnrollment(enrollmentId, databaseUrl);
+  assert.equal(reloaded?.repoUrl, 'https://github.com/example/generated-repo');
+});
+
+test('attachRepositoryUrl updates repo_url for the owning member on an active enrollment', async () => {
+  await abandon(enrollmentId, databaseUrl);
+  const started = await startChallenge(userId, challengeId, 'backend', enabledStackId, fallbackDependencies, databaseUrl);
+  enrollmentId = started.enrollment.id;
+  assert.equal(started.enrollment.repoUrl, null);
+
+  const updated = await attachRepositoryUrl(enrollmentId, userId, 'https://github.com/example/starter-kit', databaseUrl);
+  assert.equal(updated?.repoUrl, 'https://github.com/example/starter-kit');
+
+  const reloaded = await getEnrollment(enrollmentId, databaseUrl);
+  assert.equal(reloaded?.repoUrl, 'https://github.com/example/starter-kit');
+});
+
+test('attachRepositoryUrl rejects an invalid or non-GitHub URL', async () => {
+  await assert.rejects(
+    attachRepositoryUrl(enrollmentId, userId, 'not-a-url', databaseUrl),
+    InvalidRepositoryUrlError,
+  );
+  await assert.rejects(
+    attachRepositoryUrl(enrollmentId, userId, 'https://gitlab.com/example/starter-kit', databaseUrl),
+    InvalidRepositoryUrlError,
+  );
+});
+
+test('attachRepositoryUrl rejects an enrollment owned by another member', async () => {
+  const [otherUser] = await db.insert(users).values({
+    githubId: Date.now() + 1, handle: `enrollment-other-${Date.now()}`, displayName: 'Other Member', email: `enrollment-other-${Date.now()}@example.com`, role: 'member',
+  }).returning();
+  try {
+    const result = await attachRepositoryUrl(enrollmentId, otherUser.id, 'https://github.com/example/attacker-repo', databaseUrl);
+    assert.equal(result, undefined);
+
+    const reloaded = await getEnrollment(enrollmentId, databaseUrl);
+    assert.notEqual(reloaded?.repoUrl, 'https://github.com/example/attacker-repo');
+  } finally {
+    await db.delete(users).where(eq(users.id, otherUser.id));
+  }
+});
+
+test('attachRepositoryUrl rejects an abandoned enrollment', async () => {
+  const abandoned = await abandon(enrollmentId, databaseUrl);
+  assert.equal(abandoned?.status, 'abandoned');
+
+  const result = await attachRepositoryUrl(enrollmentId, userId, 'https://github.com/example/starter-kit', databaseUrl);
+  assert.equal(result, undefined);
 });
 
 test('abandon returns undefined for an id that is not an active enrollment', async () => {

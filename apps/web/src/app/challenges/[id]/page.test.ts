@@ -8,8 +8,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
+import { createSession, deleteSession, SESSION_COOKIE } from '../../../modules/identity/index.js';
 
-const { challenges, challengeVersions } = schema;
+const { challenges, challengeVersions, users, stacks, challengeStacks } = schema;
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(testDir, '..', '..', '..', '..');
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
@@ -113,6 +114,45 @@ test('GET /challenges/:id shows the brief and the four rubric weights for a publ
   assert.match(body, /<dd>60<\/dd>/);
   assert.equal((body.match(/<dd>15<\/dd>/g) ?? []).length, 2);
   assert.match(body, /<dd>10<\/dd>/);
+});
+
+test('GET /challenges/:id shows the start-challenge entry point to a signed-in member with an enabled stack', async () => {
+  let userId: string | undefined;
+  let sessionId: string | undefined;
+  let stackId: string | undefined;
+  let challengeStackId: string | undefined;
+  try {
+    const [user] = await db.insert(users).values({
+      githubId: Date.now(), handle: `challenge-page-${Date.now()}`, displayName: 'Challenge Page Tester', email: `challenge-page-${Date.now()}@example.com`, role: 'member',
+    }).returning();
+    userId = user.id;
+    const session = await createSession(userId, databaseUrl);
+    sessionId = session.id;
+
+    const [stack] = await db.insert(stacks).values({ language: 'TypeScript', framework: 'Express' }).returning();
+    stackId = stack.id;
+    const [challengeStack] = await db.insert(challengeStacks).values({ challengeId, stackId }).returning();
+    challengeStackId = challengeStack.id;
+
+    const res = await fetch(`http://127.0.0.1:${port}/challenges/${challengeId}`, {
+      headers: { cookie: `${SESSION_COOKIE}=${sessionId}` },
+    });
+    const body = await res.text();
+
+    assert.equal(res.status, 200);
+    assert.ok(!body.includes('Sign in with GitHub to start this challenge.'));
+    assert.ok(body.includes('Start challenge'));
+    // The zip-download fallback link and repository URL form only render after a client-side
+    // startChallengeAction call resolves in the browser. This test harness fetches server-rendered
+    // HTML only and has no JS runtime to drive that interaction, so it cannot exercise the fallback
+    // UI itself; apps/web/src/modules/enrollment/index.test.ts and kit-generator/index.test.ts cover
+    // that behavior at the module level instead.
+  } finally {
+    if (challengeStackId) await db.delete(challengeStacks).where(eq(challengeStacks.id, challengeStackId));
+    if (stackId) await db.delete(stacks).where(eq(stacks.id, stackId));
+    if (sessionId) await deleteSession(sessionId, databaseUrl);
+    if (userId) await db.delete(users).where(eq(users.id, userId));
+  }
 });
 
 test('GET /challenges/:id returns 404 when the challenge has no published version', async () => {
