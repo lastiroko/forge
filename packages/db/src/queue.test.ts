@@ -7,8 +7,8 @@ test('getQueue starts pg-boss and delivers a job to a subscriber', async () => {
   const boss = await getQueue(databaseUrl);
   try {
     const topic = `test-topic-${Date.now()}`;
-    let resolveReceived;
-    const received = new Promise((resolve) => {
+    let resolveReceived: (value: unknown) => void = () => {};
+    const received = new Promise<unknown>((resolve) => {
       resolveReceived = resolve;
     });
     await boss.work(topic, async (job) => {

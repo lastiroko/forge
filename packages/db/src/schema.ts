@@ -59,7 +59,6 @@ export const challengeVersions = pgTable('challenge_versions', {
   challengeId: uuid('challenge_id').notNull().references(() => challenges.id),
   version: integer('version').notNull(),
   level: text('level').notNull(),
-  // TODO: Generate migration 0011 after drizzle-kit dependencies are installed.
   brief: text('brief').notNull().default(''),
   rubric: jsonb('rubric').notNull(),
   openapiRef: text('openapi_ref').notNull(),

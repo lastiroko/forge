@@ -24,7 +24,7 @@ async function createBareFixture() {
 
 test('clones a local bare-repo fixture and checks out the known SHA', async (t) => {
   const { sourceDir, bareDir, sha } = await createBareFixture();
-  let workspaceDir;
+  let workspaceDir: string | undefined;
   t.after(async () => {
     await rm(sourceDir, { recursive: true, force: true });
     await rm(bareDir, { recursive: true, force: true });
