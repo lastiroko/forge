@@ -68,7 +68,7 @@ test('admin operations authorizes callers and returns queue, run, and heartbeat 
       [workerIds[1], 'stale'],
     ]);
   } finally {
-    if (jobId) await boss.cancel(GRADING_TOPIC, jobId);
+    if (jobId) await boss.cancel(jobId);
     await boss.stop();
     await db.delete(workerHeartbeats).where(inArray(workerHeartbeats.workerId, workerIds));
     if (runIds.length) await db.delete(gradingRuns).where(inArray(gradingRuns.id, runIds));

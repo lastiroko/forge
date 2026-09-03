@@ -24,7 +24,9 @@ export function startWorkerHeartbeat(
     writeInProgress = db.insert(workerHeartbeats).values({ workerId: instanceId }).onConflictDoUpdate({
       target: workerHeartbeats.workerId,
       set: { lastHeartbeatAt: sql`now()` },
-    }).then(() => undefined).finally(() => {
+    }).then(() => undefined).catch((error: unknown) => {
+      console.error('Worker heartbeat write failed:', error);
+    }).finally(() => {
       writeInProgress = undefined;
     });
   };

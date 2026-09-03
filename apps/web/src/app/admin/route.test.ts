@@ -77,7 +77,7 @@ before(async () => {
 
 after(async () => {
   if (server) server.kill();
-  if (jobId) await boss.cancel(GRADING_TOPIC, jobId);
+  if (jobId) await boss.cancel(jobId);
   await boss.stop();
   await db.delete(workerHeartbeats).where(eq(workerHeartbeats.workerId, workerId));
   if (ids.runs.length) await db.delete(gradingRuns).where(inArray(gradingRuns.id, ids.runs));
