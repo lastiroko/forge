@@ -213,3 +213,105 @@ test('submit enqueues exactly one grading job carrying the new submission id', a
     await boss.stop();
   }
 });
+
+test('submit rejects when GitHub reports the repository is missing a Dockerfile', async () => {
+  const { db, pool } = createDbClient(databaseUrl);
+  const userId = randomUUID();
+  const stackId = randomUUID();
+  let enrollmentId: string | undefined;
+  let versionId: string | undefined;
+  let challengeId: string | undefined;
+
+  try {
+    const [challenge] = await db.insert(challenges).values({ title: 'Challenge E', level: 'junior' }).returning();
+    challengeId = challenge.id;
+    const [version] = await db
+      .insert(challengeVersions)
+      .values({ challengeId, version: 1, level: 'junior', rubric: {}, openapiRef: 'e', hiddenTestsRef: 'e' })
+      .returning();
+    versionId = version.id;
+
+    const [enrollment] = await db
+      .insert(enrollments)
+      .values({ userId, challengeVersionId: versionId, mode: 'backend', stackId, status: 'active', repoUrl: 'https://github.com/acme/widget-api' })
+      .returning();
+    enrollmentId = enrollment.id;
+
+    const githubFetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('Dockerfile')) {
+        return new Response(null, { status: 404 });
+      }
+      if (url.includes('challenge.yml')) {
+        return new Response(
+          JSON.stringify({ content: Buffer.from('slug: widget-api').toString('base64'), encoding: 'base64' }),
+          { status: 200 },
+        );
+      }
+      throw new Error('unexpected fetch url: ' + url);
+    }) as typeof fetch;
+
+    await assert.rejects(() => submit(enrollmentId!, 'sha-no-dockerfile', databaseUrl, githubFetch), /Dockerfile/);
+  } finally {
+    if (enrollmentId) await db.delete(enrollments).where(eq(enrollments.id, enrollmentId));
+    if (versionId) await db.delete(challengeVersions).where(eq(challengeVersions.id, versionId));
+    if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));
+    await pool.end();
+  }
+});
+
+test('submit succeeds when GitHub reports a valid repository shape', async () => {
+  const { db, pool } = createDbClient(databaseUrl);
+  const userId = randomUUID();
+  const stackId = randomUUID();
+  let enrollmentId: string | undefined;
+  let versionId: string | undefined;
+  let challengeId: string | undefined;
+  let submissionId: string | undefined;
+
+  try {
+    const [challenge] = await db.insert(challenges).values({ title: 'Challenge F', level: 'junior' }).returning();
+    challengeId = challenge.id;
+    const [version] = await db
+      .insert(challengeVersions)
+      .values({ challengeId, version: 1, level: 'junior', rubric: {}, openapiRef: 'f', hiddenTestsRef: 'f' })
+      .returning();
+    versionId = version.id;
+
+    const [enrollment] = await db
+      .insert(enrollments)
+      .values({ userId, challengeVersionId: versionId, mode: 'backend', stackId, status: 'active', repoUrl: 'https://github.com/acme/widget-api' })
+      .returning();
+    enrollmentId = enrollment.id;
+
+    const githubFetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('Dockerfile')) {
+        return new Response(
+          JSON.stringify({ content: Buffer.from('FROM node:20').toString('base64'), encoding: 'base64' }),
+          { status: 200 },
+        );
+      }
+      if (url.includes('challenge.yml')) {
+        return new Response(
+          JSON.stringify({ content: Buffer.from('slug: widget-api').toString('base64'), encoding: 'base64' }),
+          { status: 200 },
+        );
+      }
+      throw new Error('unexpected fetch url: ' + url);
+    }) as typeof fetch;
+
+    const submission = await submit(enrollmentId, 'sha-valid-shape', databaseUrl, githubFetch);
+    submissionId = submission.id;
+    assert.equal(submission.status, 'queued');
+  } finally {
+    if (submissionId) {
+      await db.delete(gradingRuns).where(eq(gradingRuns.submissionId, submissionId));
+      await db.delete(submissions).where(eq(submissions.id, submissionId));
+    }
+    if (enrollmentId) await db.delete(enrollments).where(eq(enrollments.id, enrollmentId));
+    if (versionId) await db.delete(challengeVersions).where(eq(challengeVersions.id, versionId));
+    if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));
+    await pool.end();
+  }
+});

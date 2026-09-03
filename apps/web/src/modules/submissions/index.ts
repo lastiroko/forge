@@ -2,6 +2,7 @@ import { and, desc, eq, gte } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
 import { enqueue } from '../grading/index.js';
+import { validateRepositoryShape } from './repo-validation.js';
 
 const { enrollments, challengeVersions, submissions, gradingRuns } = schema;
 
@@ -35,6 +36,7 @@ export async function submit(
   enrollmentId: string,
   commitSha: string,
   databaseUrl: string = loadEnv().DATABASE_URL,
+  githubFetch: typeof fetch = fetch,
 ): Promise<Submission> {
   const { db, pool } = createDbClient(databaseUrl);
   try {
@@ -42,6 +44,8 @@ export async function submit(
     if (!enrollment) {
       throw new Error(`Submissions module: no enrollment found with id ${enrollmentId}`);
     }
+
+    await validateRepositoryShape(enrollment.repoUrl, commitSha, githubFetch);
 
     const [challengeVersion] = await db
       .select()
