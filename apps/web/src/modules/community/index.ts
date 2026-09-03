@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { and, desc, eq, isNotNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
 import { getChallenge } from '../catalogue/index.js';
@@ -113,6 +113,22 @@ export async function comment(
   }
 }
 
+export async function listComments(
+  target: CommentTarget,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<Comment[]> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    return await db
+      .select()
+      .from(comments)
+      .where(and(eq(comments.targetType, target.type), eq(comments.targetId, target.id)))
+      .orderBy(asc(comments.createdAt), asc(comments.id));
+  } finally {
+    await pool.end();
+  }
+}
+
 export async function report(
   target: ReportTarget,
   reason: string,
@@ -182,10 +198,8 @@ export async function listPublishedSolutions(
 
 export async function getPublishedSolution(
   id: string,
-  cookieStore: SessionCookieReader = cookies(),
   databaseUrl: string = loadEnv().DATABASE_URL,
 ): Promise<PublishedSolutionDetail | undefined> {
-  await requireRole('member', cookieStore, databaseUrl);
   const { db, pool } = createDbClient(databaseUrl);
   let row: {
     id: string;
