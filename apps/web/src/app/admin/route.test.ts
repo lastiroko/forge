@@ -117,10 +117,17 @@ test('GET /admin renders read-only operational data and the exact queue growth',
   assert.match(html, new RegExp(ids.runs[1]));
   assert.match(html, /seeded-failed-stage/);
   assert.doesNotMatch(html, /secret|configuration/i);
-  assert.match(html, new RegExp(`name="runId" value="${ids.runs[0]}"[\\s\\S]*?name="action" value="cancel"`));
-  assert.match(html, new RegExp(`name="runId" value="${ids.runs[1]}"[\\s\\S]*?name="action" value="retry"`));
-  assert.doesNotMatch(html, new RegExp(`name="runId" value="${ids.runs[0]}"[\\s\\S]*?name="action" value="retry"`));
-  assert.doesNotMatch(html, new RegExp(`name="runId" value="${ids.runs[1]}"[\\s\\S]*?name="action" value="cancel"`));
+
+  function rowFor(runId: string): string {
+    const match = html.match(new RegExp(`<tr>(?:(?!</tr>)[\\s\\S])*?${runId}(?:(?!</tr>)[\\s\\S])*?</tr>`));
+    assert.ok(match, `expected a table row for run ${runId}`);
+    return match[0];
+  }
+
+  assert.match(rowFor(ids.runs[0]), /name="action" value="cancel"/);
+  assert.doesNotMatch(rowFor(ids.runs[0]), /name="action" value="retry"/);
+  assert.match(rowFor(ids.runs[1]), /name="action" value="retry"/);
+  assert.doesNotMatch(rowFor(ids.runs[1]), /name="action" value="cancel"/);
 });
 
 test('POST /admin returns 403 to member and anonymous callers without mutating state', async () => {

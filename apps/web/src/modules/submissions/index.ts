@@ -131,7 +131,7 @@ export async function getLatestGradingStatus(
   }
 }
 
-const TERMINAL_GRADING_STATUSES = new Set(['successful', 'failed']);
+const TERMINAL_GRADING_STATUSES = new Set(['successful', 'failed', 'cancelled']);
 
 export async function* streamStatus(
   submissionId: string,

@@ -88,7 +88,6 @@ test('retryGradingRun and cancelGradingRun require the admin role, validate run 
   const enrollmentId = randomUUID();
   const submissionIds: string[] = [];
   const runIds: string[] = [];
-  const auditLogIds: string[] = [];
   let retryJobId: string | null = null;
   let cancelJobId: string | null = null;
   try {
@@ -151,7 +150,6 @@ test('retryGradingRun and cancelGradingRun require the admin role, validate run 
     assert.equal(retryAuditRows[0].actorId, adminUserId);
     assert.equal(retryAuditRows[0].action, 'grading_run.retry');
     assert.equal(retryAuditRows[0].targetType, 'grading_run');
-    auditLogIds.push(retryAuditRows[0].id);
 
     await assert.rejects(() => cancelGradingRun(failedRun.id, cookieStore(adminSessionId), databaseUrl), /is not running/);
 
@@ -168,9 +166,8 @@ test('retryGradingRun and cancelGradingRun require the admin role, validate run 
     assert.equal(cancelAuditRows[0].actorId, adminUserId);
     assert.equal(cancelAuditRows[0].action, 'grading_run.cancel');
     assert.equal(cancelAuditRows[0].targetType, 'grading_run');
-    auditLogIds.push(cancelAuditRows[0].id);
   } finally {
-    if (auditLogIds.length) await db.delete(auditLog).where(inArray(auditLog.id, auditLogIds));
+    if (runIds.length) await db.delete(auditLog).where(inArray(auditLog.targetId, runIds));
     if (retryJobId) await boss.cancel(retryJobId);
     await boss.stop();
     if (runIds.length) await db.delete(gradingRuns).where(inArray(gradingRuns.id, runIds));

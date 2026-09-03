@@ -145,6 +145,57 @@ test('getSubmission returns a previously stored submission', async () => {
   }
 });
 
+test('streamStatus emits a cancelled snapshot once and then terminates', async () => {
+  const { db, pool } = createDbClient(databaseUrl);
+  const userId = randomUUID();
+  const stackId = randomUUID();
+  let enrollmentId: string | undefined;
+  let versionId: string | undefined;
+  let challengeId: string | undefined;
+  let submissionId: string | undefined;
+
+  try {
+    const [challenge] = await db.insert(challenges).values({ title: 'Challenge E', level: 'junior' }).returning();
+    challengeId = challenge.id;
+    const [version] = await db
+      .insert(challengeVersions)
+      .values({ challengeId, version: 1, level: 'junior', rubric: {}, openapiRef: 'e', hiddenTestsRef: 'e' })
+      .returning();
+    versionId = version.id;
+
+    const [enrollment] = await db
+      .insert(enrollments)
+      .values({ userId, challengeVersionId: versionId, mode: 'backend', stackId, status: 'active' })
+      .returning();
+    enrollmentId = enrollment.id;
+
+    const inserted = await submit(enrollmentId, 'sha-cancelled', databaseUrl);
+    submissionId = inserted.id;
+
+    const controller = new AbortController();
+    const snapshots = streamStatus(submissionId, controller.signal, databaseUrl);
+    const initial = await snapshots.next();
+    assert.equal(initial.value?.status, 'queued');
+    const [run] = await db.select().from(gradingRuns).where(eq(gradingRuns.submissionId, submissionId));
+    await db.update(gradingRuns).set({
+      status: 'cancelled', updatedAt: new Date(Date.now() + 1_000),
+    }).where(eq(gradingRuns.id, run.id));
+    const terminal = await snapshots.next();
+    assert.equal(terminal.value?.status, 'cancelled');
+    assert.equal((await snapshots.next()).done, true);
+    controller.abort();
+  } finally {
+    if (submissionId) {
+      await db.delete(gradingRuns).where(eq(gradingRuns.submissionId, submissionId));
+      await db.delete(submissions).where(eq(submissions.id, submissionId));
+    }
+    if (enrollmentId) await db.delete(enrollments).where(eq(enrollments.id, enrollmentId));
+    if (versionId) await db.delete(challengeVersions).where(eq(challengeVersions.id, versionId));
+    if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));
+    await pool.end();
+  }
+});
+
 test('submit enqueues exactly one grading job carrying the new submission id', async () => {
   const { db, pool } = createDbClient(databaseUrl);
   const userId = randomUUID();
