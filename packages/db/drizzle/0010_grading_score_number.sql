@@ -1,0 +1,1 @@
+ALTER TABLE "grading_runs" ALTER COLUMN "score" SET DATA TYPE double precision;
