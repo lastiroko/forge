@@ -1,4 +1,5 @@
 CREATE TABLE IF NOT EXISTS "notification_preferences" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,
 	"event_type" text NOT NULL,
 	"email_enabled" boolean DEFAULT true NOT NULL,

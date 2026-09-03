@@ -1,116 +1,9 @@
 {
-  "id": "581002af-28d0-4ac5-aada-225cbda9ac98",
-  "prevId": "9bc84359-1fcf-45c5-a439-97596bedb67c",
+  "id": "57f276a5-35cb-44fa-8176-69ac0378783b",
+  "prevId": "581002af-28d0-4ac5-aada-225cbda9ac98",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "app.users": {
-      "name": "users",
-      "schema": "app",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "github_id": {
-          "name": "github_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "handle": {
-          "name": "handle",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "display_name": {
-          "name": "display_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "avatar_url": {
-          "name": "avatar_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role": {
-          "name": "role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
-    },
-    "app.sessions": {
-      "name": "sessions",
-      "schema": "app",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "sessions_user_id_users_id_fk": {
-          "name": "sessions_user_id_users_id_fk",
-          "tableFrom": "sessions",
-          "tableTo": "users",
-          "schemaTo": "app",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
-    },
     "public.challenge_stacks": {
       "name": "challenge_stacks",
       "schema": "",
@@ -141,8 +34,12 @@
           "name": "challenge_stacks_challenge_id_challenges_id_fk",
           "tableFrom": "challenge_stacks",
           "tableTo": "challenges",
-          "columnsFrom": ["challenge_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "challenge_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -150,8 +47,12 @@
           "name": "challenge_stacks_stack_id_stacks_id_fk",
           "tableFrom": "challenge_stacks",
           "tableTo": "stacks",
-          "columnsFrom": ["stack_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "stack_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -161,7 +62,10 @@
         "challenge_stacks_challenge_id_stack_id_unique": {
           "name": "challenge_stacks_challenge_id_stack_id_unique",
           "nullsNotDistinct": false,
-          "columns": ["challenge_id", "stack_id"]
+          "columns": [
+            "challenge_id",
+            "stack_id"
+          ]
         }
       }
     },
@@ -225,8 +129,12 @@
           "name": "challenge_versions_challenge_id_challenges_id_fk",
           "tableFrom": "challenge_versions",
           "tableTo": "challenges",
-          "columnsFrom": ["challenge_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "challenge_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -236,7 +144,10 @@
         "challenge_versions_challenge_id_version_unique": {
           "name": "challenge_versions_challenge_id_version_unique",
           "nullsNotDistinct": false,
-          "columns": ["challenge_id", "version"]
+          "columns": [
+            "challenge_id",
+            "version"
+          ]
         }
       }
     },
@@ -340,8 +251,12 @@
           "tableFrom": "comments",
           "tableTo": "users",
           "schemaTo": "app",
-          "columnsFrom": ["author_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "author_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -463,6 +378,99 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {}
     },
+    "public.notification_preferences": {
+      "name": "notification_preferences",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email_enabled": {
+          "name": "email_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "notification_preferences_user_id_event_type_unique": {
+          "name": "notification_preferences_user_id_event_type_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "user_id",
+            "event_type"
+          ]
+        }
+      }
+    },
+    "public.notifications": {
+      "name": "notifications",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "read_at": {
+          "name": "read_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
     "public.points_ledger": {
       "name": "points_ledger",
       "schema": "",
@@ -567,8 +575,63 @@
           "tableFrom": "reports",
           "tableTo": "users",
           "schemaTo": "app",
-          "columnsFrom": ["reporter_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "reporter_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "app.sessions": {
+      "name": "sessions",
+      "schema": "app",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "sessions_user_id_users_id_fk": {
+          "name": "sessions_user_id_users_id_fk",
+          "tableFrom": "sessions",
+          "tableTo": "users",
+          "schemaTo": "app",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -618,8 +681,12 @@
           "name": "solutions_submission_id_submissions_id_fk",
           "tableFrom": "solutions",
           "tableTo": "submissions",
-          "columnsFrom": ["submission_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "submission_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -629,7 +696,9 @@
         "solutions_submission_id_unique": {
           "name": "solutions_submission_id_unique",
           "nullsNotDistinct": false,
-          "columns": ["submission_id"]
+          "columns": [
+            "submission_id"
+          ]
         }
       }
     },
@@ -705,12 +774,76 @@
           "name": "submissions_enrollment_id_enrollments_id_fk",
           "tableFrom": "submissions",
           "tableTo": "enrollments",
-          "columnsFrom": ["enrollment_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "enrollment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "app.users": {
+      "name": "users",
+      "schema": "app",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "github_id": {
+          "name": "github_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "handle": {
+          "name": "handle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "avatar_url": {
+          "name": "avatar_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {}
     }
@@ -719,6 +852,7 @@
   "schemas": {
     "app": "app"
   },
+  "sequences": {},
   "_meta": {
     "columns": {},
     "schemas": {},
