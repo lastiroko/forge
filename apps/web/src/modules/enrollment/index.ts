@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
 import {
@@ -10,6 +10,20 @@ import {
 const { enrollments, challengeVersions, submissions, gradingRuns } = schema;
 
 export type Enrollment = typeof enrollments.$inferSelect;
+
+export async function listAccountExportEnrollments(
+  userId: string,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<Enrollment[]> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    return await db.select().from(enrollments)
+      .where(eq(enrollments.userId, userId))
+      .orderBy(asc(enrollments.createdAt), asc(enrollments.id));
+  } finally {
+    await pool.end();
+  }
+}
 
 export interface EnrollmentHistoryRun {
   id: string;
