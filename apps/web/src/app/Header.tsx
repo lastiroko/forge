@@ -10,6 +10,7 @@ export async function Header() {
     <header>
       <a href="/">Forge</a>
       {user ? <a href="/settings/profile">Settings</a> : null}
+      {user ? <a href="/account/settings">Account settings</a> : null}
       {notifications ? <NotificationList initialNotifications={notifications} /> : null}
     </header>
   );
