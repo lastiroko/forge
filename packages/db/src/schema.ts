@@ -41,7 +41,10 @@ export const stacks = pgTable('stacks', {
   id: uuid('id').primaryKey().defaultRandom(),
   language: text('language').notNull(),
   framework: text('framework').notNull(),
-});
+  templateKey: text('template_key'),
+}, (table) => ({
+  templateKeyUnique: uniqueIndex('stacks_template_key_unique').on(table.templateKey),
+}));
 
 export const challenges = pgTable('challenges', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -49,8 +52,11 @@ export const challenges = pgTable('challenges', {
   level: text('level').notNull(),
   backendEnabled: boolean('backend_enabled').notNull().default(true),
   fullstackEnabled: boolean('fullstack_enabled').notNull().default(false),
+  contentSlug: text('content_slug'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  contentSlugUnique: uniqueIndex('challenges_content_slug_unique').on(table.contentSlug),
+}));
 
 export const challengeStacks = pgTable('challenge_stacks', {
   id: uuid('id').primaryKey().defaultRandom(),

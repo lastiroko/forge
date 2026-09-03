@@ -1,0 +1,8 @@
+dockerfile: Dockerfile
+composeSnippet: compose.snippet.yml
+readmeFragment: README.fragment.md
+routeStub:
+  template: route-stub.py.template
+  dir: app/routes
+  extension: .py
+ciWorkflow: checks.workflow.yml
