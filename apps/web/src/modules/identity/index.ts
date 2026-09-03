@@ -20,6 +20,14 @@ export class AuthorizationError extends Error {
   }
 }
 
+// Next.js compiles Server Actions and the modules they import into a bundle
+// separate from the one used to render the page, so a thrown AuthorizationError
+// can arrive as an instance of a different copy of this class in production.
+// Check the `name` string instead of `instanceof`, since that survives bundling.
+export function isAuthorizationError(error: unknown): error is AuthorizationError {
+  return error instanceof Error && error.name === 'AuthorizationError';
+}
+
 const roleRank: Record<Role, number> = {
   member: 0,
   author: 1,

@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { AuthorizationError } from '../../../modules/identity/index.js';
+import { isAuthorizationError } from '../../../modules/identity/index.js';
 import { updateProfileForm } from './profile-update.js';
 
 export async function updateProfileAction(formData: FormData): Promise<void> {
@@ -11,7 +11,7 @@ export async function updateProfileAction(formData: FormData): Promise<void> {
   try {
     result = await updateProfileForm(formData, cookies());
   } catch (error) {
-    if (error instanceof AuthorizationError) redirect('/auth/github');
+    if (isAuthorizationError(error)) redirect('/auth/github');
     throw error;
   }
   if (!result.ok) {
