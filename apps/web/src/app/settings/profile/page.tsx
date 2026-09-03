@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getCurrentUser } from '../../../modules/identity/index.js';
+import { getCurrentUser, PROFILE_ERROR_MESSAGES, type ProfileErrorCode } from '../../../modules/identity/index.js';
 import { updateProfileAction } from './actions.js';
 
 export const dynamic = 'force-dynamic';
@@ -14,14 +14,20 @@ interface ProfileSettingsPageProps {
   };
 }
 
+function isProfileErrorCode(value: string | undefined): value is ProfileErrorCode {
+  return value !== undefined && Object.prototype.hasOwnProperty.call(PROFILE_ERROR_MESSAGES, value);
+}
+
 export default async function ProfileSettingsPage({ searchParams }: ProfileSettingsPageProps) {
   const user = await getCurrentUser();
   if (!user) redirect('/auth/github');
 
+  // searchParams come straight from the URL, so only render messages for
+  // recognized error codes rather than echoing back whatever a visitor put there.
   const errors: Partial<Record<(typeof FIELDS)[number], string>> = {};
   for (const field of FIELDS) {
-    const value = searchParams[field];
-    if (value) errors[field] = value;
+    const code = searchParams[field];
+    if (isProfileErrorCode(code)) errors[field] = PROFILE_ERROR_MESSAGES[code];
   }
 
   return (

@@ -214,19 +214,32 @@ export interface ProfileInput {
   links: string[];
 }
 
+const MAX_DISPLAY_NAME_LENGTH = 100;
+const MAX_BIO_LENGTH = 280;
+const MAX_LINKS = 5;
+
+// Codes, not free-form text: the settings page round-trips these through a
+// redirect URL's search params, so the rendered message must come from this
+// fixed table rather than from anything an attacker could put in the URL.
+export const PROFILE_ERROR_MESSAGES = {
+  displayName_length: `Display name must be between 1 and ${MAX_DISPLAY_NAME_LENGTH} characters.`,
+  bio_length: `Bio must be at most ${MAX_BIO_LENGTH} characters.`,
+  links_count: `You can add at most ${MAX_LINKS} links.`,
+  links_duplicate: 'Links must be unique.',
+  links_invalid: 'Links must be absolute http:// or https:// URLs.',
+} as const;
+
+export type ProfileErrorCode = keyof typeof PROFILE_ERROR_MESSAGES;
+
 export interface ProfileValidationErrors {
-  displayName?: string;
-  bio?: string;
-  links?: string;
+  displayName?: ProfileErrorCode;
+  bio?: ProfileErrorCode;
+  links?: ProfileErrorCode;
 }
 
 export type ProfileUpdateResult =
   | { ok: true; user: User }
   | { ok: false; errors: ProfileValidationErrors };
-
-const MAX_DISPLAY_NAME_LENGTH = 100;
-const MAX_BIO_LENGTH = 280;
-const MAX_LINKS = 5;
 
 function isHttpUrl(link: string): boolean {
   try {
@@ -241,19 +254,19 @@ function validateProfileInput(displayName: string, bio: string, links: string[])
   const errors: ProfileValidationErrors = {};
 
   if (displayName.length < 1 || displayName.length > MAX_DISPLAY_NAME_LENGTH) {
-    errors.displayName = `Display name must be between 1 and ${MAX_DISPLAY_NAME_LENGTH} characters.`;
+    errors.displayName = 'displayName_length';
   }
 
   if (bio.length > MAX_BIO_LENGTH) {
-    errors.bio = `Bio must be at most ${MAX_BIO_LENGTH} characters.`;
+    errors.bio = 'bio_length';
   }
 
   if (links.length > MAX_LINKS) {
-    errors.links = `You can add at most ${MAX_LINKS} links.`;
+    errors.links = 'links_count';
   } else if (new Set(links).size !== links.length) {
-    errors.links = 'Links must be unique.';
+    errors.links = 'links_duplicate';
   } else if (links.some((link) => !isHttpUrl(link))) {
-    errors.links = 'Links must be absolute http:// or https:// URLs.';
+    errors.links = 'links_invalid';
   }
 
   return errors;

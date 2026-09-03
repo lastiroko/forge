@@ -105,7 +105,11 @@ test('submitting the settings form with an expired session redirects to GitHub s
   }).returning();
   ids.sessions.push(expiredSession.id);
 
+  const getResponse = await fetch(`${origin}/settings/profile`, { headers: sessionHeaders(sessionId) });
+  const hiddenFields = extractHiddenFields(await getResponse.text());
+
   const formData = new FormData();
+  for (const [name, value] of hiddenFields) formData.set(name, value);
   formData.set('displayName', 'Should Not Save');
   formData.set('bio', '');
   formData.set('links', '');
