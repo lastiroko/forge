@@ -1,0 +1,22 @@
+[
+  {
+    "name": "health check returns ok",
+    "request": { "method": "GET", "path": "/health" },
+    "expect": { "status": 200, "body": { "status": "ok" } }
+  },
+  {
+    "name": "get seeded item by id",
+    "request": { "method": "GET", "path": "/items/seed-1" },
+    "expect": { "status": 200, "body": { "id": "seed-1", "title": "Sample item", "done": false } }
+  },
+  {
+    "name": "create item returns 201",
+    "request": { "method": "POST", "path": "/items", "body": { "title": "Buy milk" } },
+    "expect": { "status": 201 }
+  },
+  {
+    "name": "get missing item returns 404",
+    "request": { "method": "GET", "path": "/items/does-not-exist" },
+    "expect": { "status": 404, "body": { "error": "not found" } }
+  }
+]

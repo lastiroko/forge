@@ -1,0 +1,173 @@
+openapi: 3.0.3
+info:
+  title: Todo Items API
+  version: "1.0.0"
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+  /items:
+    get:
+      summary: List all items
+      responses:
+        '200':
+          description: Array of items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, title, done]
+                  properties:
+                    id:
+                      type: string
+                    title:
+                      type: string
+                    done:
+                      type: boolean
+    post:
+      summary: Create an item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+      responses:
+        '201':
+          description: Item created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, title, done]
+                properties:
+                  id:
+                    type: string
+                  title:
+                    type: string
+                  done:
+                    type: boolean
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+  /items/{id}:
+    get:
+      summary: Get an item by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The item
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, title, done]
+                properties:
+                  id:
+                    type: string
+                  title:
+                    type: string
+                  done:
+                    type: boolean
+        '404':
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+    patch:
+      summary: Update an item's done flag
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                done:
+                  type: boolean
+      responses:
+        '200':
+          description: The updated item
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, title, done]
+                properties:
+                  id:
+                    type: string
+                  title:
+                    type: string
+                  done:
+                    type: boolean
+        '404':
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+    delete:
+      summary: Delete an item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Item deleted
+        '404':
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string

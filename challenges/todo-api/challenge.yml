@@ -1,0 +1,15 @@
+slug: todo-api
+level: junior
+briefRef: brief.md
+openapiRef: openapi.yaml
+hiddenTestsRef: checks/functional-hidden.json
+rubric:
+  functional: 60
+  contract: 15
+  robustness: 15
+  quality: 10
+enabledModes:
+  - backend
+enabledStacks:
+  - python-fastapi
+services: []
