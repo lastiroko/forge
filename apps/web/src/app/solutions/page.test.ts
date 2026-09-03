@@ -1,6 +1,7 @@
 import { after, before, test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -27,6 +28,24 @@ let memberSessionId: string | undefined;
 let publishedSolutionId: string | undefined;
 let unpublishedSolutionId: string | undefined;
 let repoUrl: string | undefined;
+let commentActionId: string | undefined;
+
+async function postCommentAction(
+  target: { type: 'solution' | 'challenge'; id: string },
+  body: string,
+  sessionId?: string,
+): Promise<Response> {
+  return fetch(`http://127.0.0.1:${port}/solutions/${publishedSolutionId}`, {
+    method: 'POST',
+    headers: {
+      Accept: 'text/x-component',
+      'Content-Type': 'text/plain;charset=UTF-8',
+      'Next-Action': commentActionId as string,
+      ...(sessionId ? { Cookie: `${SESSION_COOKIE}=${sessionId}` } : {}),
+    },
+    body: JSON.stringify([target, body]),
+  });
+}
 
 async function waitForServer(url: string): Promise<void> {
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -112,6 +131,15 @@ before(async () => {
   unpublishedSolutionId = unpublished.id;
 
   execFileSync('npx', ['next', 'build'], { cwd: webRoot, stdio: 'inherit' });
+  const actionManifest = JSON.parse(await readFile(
+    path.join(webRoot, '.next', 'server', 'server-reference-manifest.json'),
+    'utf-8',
+  )) as { node: Record<string, { workers: Record<string, unknown> }> };
+  const actionIds = Object.entries(actionManifest.node)
+    .filter(([, action]) => Object.hasOwn(action.workers, 'app/solutions/[id]/page'))
+    .map(([id]) => id);
+  assert.equal(actionIds.length, 1);
+  [commentActionId] = actionIds;
   server = spawn('node', ['.next/standalone/apps/web/server.js'], {
     cwd: webRoot,
     env: { ...process.env, DATABASE_URL: databaseUrl, PORT: String(port), HOSTNAME: '127.0.0.1' },
@@ -201,6 +229,52 @@ test('comment action rejects whitespace with a stable validation message without
 
   const after = await db.select().from(comments).where(eq(comments.targetId, publishedSolutionId as string));
   assert.equal(after.length, before.length);
+});
+
+test('comment action authorizes members and inserts trimmed solution and challenge comments', async () => {
+  const unique = randomUUID();
+  const solutionBody = `Live solution comment ${unique}`;
+  const challengeBody = `Live challenge comment ${unique}`;
+  const solutionResponse = await postCommentAction(
+    { type: 'solution', id: publishedSolutionId as string },
+    `  ${solutionBody}  `,
+    memberSessionId,
+  );
+  assert.equal(solutionResponse.status, 200);
+
+  const challengeResponse = await postCommentAction(
+    { type: 'challenge', id: ids.challenges[0] },
+    challengeBody,
+    memberSessionId,
+  );
+  assert.equal(challengeResponse.status, 200);
+
+  const inserted = (await db.select().from(comments))
+    .filter((row) => row.body === solutionBody || row.body === challengeBody);
+  ids.comments.push(...inserted.map((comment) => comment.id));
+  assert.equal(inserted.length, 2);
+  const solutionComment = inserted.find((comment) => comment.body === solutionBody);
+  assert.deepEqual(
+    [solutionComment?.targetType, solutionComment?.targetId, solutionComment?.authorId],
+    ['solution', publishedSolutionId, ids.users[0]],
+  );
+  const challengeComment = inserted.find((comment) => comment.body === challengeBody);
+  assert.deepEqual(
+    [challengeComment?.targetType, challengeComment?.targetId, challengeComment?.authorId],
+    ['challenge', ids.challenges[0], ids.users[0]],
+  );
+});
+
+test('comment action rejects a signed-out submission without inserting a row', async () => {
+  const body = `Rejected signed-out comment ${randomUUID()}`;
+  const response = await postCommentAction(
+    { type: 'solution', id: publishedSolutionId as string },
+    body,
+  );
+
+  assert.equal(response.status, 500);
+  const inserted = (await db.select().from(comments)).filter((row) => row.body === body);
+  assert.equal(inserted.length, 0);
 });
 
 test('appending a returned comment preserves existing comments and places it last', () => {
