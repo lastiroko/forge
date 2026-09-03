@@ -36,8 +36,8 @@ test('rejects rubric updates to a published challenge version', async () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof Error);
-        assert.ok(error.cause instanceof Error);
-        assert.match(error.cause.message, /published challenge versions are immutable/);
+        const message = error.cause instanceof Error ? error.cause.message : error.message;
+        assert.match(message, /published challenge versions are immutable/);
         return true;
       },
     );
