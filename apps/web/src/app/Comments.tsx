@@ -3,6 +3,7 @@
 import React, { useRef, useState, type FormEvent } from 'react';
 import type { Comment, CommentTarget } from '../modules/community/index.js';
 import { commentAction } from './comment-actions.js';
+import { ReportForm } from './ReportForm.js';
 
 interface CommentsProps {
   target: CommentTarget;
@@ -64,7 +65,12 @@ export function Comments({ target, initialComments, isSignedIn }: CommentsProps)
     <section>
       <h2>Comments</h2>
       <ol>
-        {displayedComments.map((comment) => <li key={comment.id}>{comment.body}</li>)}
+        {displayedComments.map((comment) => (
+          <li key={comment.id}>
+            {comment.body}
+            {isSignedIn ? <ReportForm target={{ type: 'comment', id: comment.id }} /> : null}
+          </li>
+        ))}
       </ol>
       {isSignedIn ? (
         <form onSubmit={submit}>
