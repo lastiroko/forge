@@ -1,4 +1,5 @@
-import { pgTable, pgSchema, uuid, text, bigint, timestamp, integer, boolean, jsonb, doublePrecision, unique } from 'drizzle-orm/pg-core';
+import { pgTable, pgSchema, uuid, text, bigint, timestamp, integer, boolean, jsonb, doublePrecision, unique, uniqueIndex } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const appSchema = pgSchema('app');
 
@@ -124,7 +125,11 @@ export const pointsLedger = pgTable('points_ledger', {
   reason: text('reason').notNull(),
   gradingRunId: uuid('grading_run_id').references(() => gradingRuns.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  gradingRunUnique: uniqueIndex('points_ledger_grading_run_id_unique')
+    .on(table.gradingRunId)
+    .where(sql`${table.gradingRunId} is not null`),
+}));
 
 export const leaderboardSnapshots = pgTable('leaderboard_snapshots', {
   id: uuid('id').primaryKey().defaultRandom(),
