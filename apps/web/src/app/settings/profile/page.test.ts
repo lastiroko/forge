@@ -98,3 +98,25 @@ test('submitting the settings form saves the profile and the public profile refl
   assert.ok(body.includes('href="https://example.com"'));
   assert.ok(body.includes('href="https://github.com/settings-member"'));
 });
+
+test('submitting the settings form with an expired session redirects to GitHub sign-in instead of erroring', async () => {
+  const [expiredSession] = await db.insert(sessions).values({
+    userId: ids.users[0], expiresAt: new Date(Date.now() - 1000),
+  }).returning();
+  ids.sessions.push(expiredSession.id);
+
+  const formData = new FormData();
+  formData.set('displayName', 'Should Not Save');
+  formData.set('bio', '');
+  formData.set('links', '');
+
+  const response = await fetch(`${origin}/settings/profile`, {
+    method: 'POST',
+    headers: { ...sessionHeaders(expiredSession.id), origin },
+    body: formData,
+    redirect: 'manual',
+  });
+
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/auth/github');
+});

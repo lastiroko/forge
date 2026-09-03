@@ -101,7 +101,8 @@ test('callback exchanges GitHub data, upserts one user, and persists a session o
   rows = await db.select().from(users).where(eq(users.githubId, githubId));
   assert.equal(rows.length, 1);
   assert.equal(rows[0].handle, 'octo-second');
-  assert.equal(rows[0].displayName, 'Octo Second');
+  // displayName is set on insert only, so a member's edited name survives later GitHub sign-ins.
+  assert.equal(rows[0].displayName, 'Octo First');
   assert.equal(rows[0].avatarUrl, 'https://avatars.example/2');
   assert.equal(rows[0].email, 'primary-2@example.com');
   assert.equal(rows[0].role, 'admin');

@@ -52,10 +52,6 @@ export async function upsertGithubUser(
 ): Promise<User> {
   const { db, pool } = createDbClient(databaseUrl);
   try {
-    // TODO(#69): a locally edited display name is overwritten on the member's next GitHub
-    // sign-in, since apps/web/src/app/auth/github/callback/route.test.ts already asserts that
-    // repeat sign-ins refresh displayName from GitHub. That test is outside this ticket's file
-    // list, so preserving edited display names needs a follow-up ticket that updates it too.
     const [user] = await db
       .insert(users)
       .values({ ...identity, role: 'member' })
@@ -63,7 +59,6 @@ export async function upsertGithubUser(
         target: users.githubId,
         set: {
           handle: identity.handle,
-          displayName: identity.displayName,
           avatarUrl: identity.avatarUrl,
           email: identity.email,
         },
