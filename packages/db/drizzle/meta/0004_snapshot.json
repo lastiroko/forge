@@ -1,5 +1,5 @@
 {
-  "id": "465fd9bb-a253-4389-be24-d4418081742f",
+  "id": "55abec95-7c2c-4a46-a43c-46ca3f44dbff",
   "prevId": "7e3fb397-fcdb-4ae6-ad75-dc0aabb6a966",
   "version": "7",
   "dialect": "postgresql",
@@ -111,6 +111,60 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {}
     },
+    "public.challenge_stacks": {
+      "name": "challenge_stacks",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "challenge_id": {
+          "name": "challenge_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stack_id": {
+          "name": "stack_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "challenge_stacks_challenge_id_challenges_id_fk": {
+          "name": "challenge_stacks_challenge_id_challenges_id_fk",
+          "tableFrom": "challenge_stacks",
+          "tableTo": "challenges",
+          "columnsFrom": ["challenge_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "challenge_stacks_stack_id_stacks_id_fk": {
+          "name": "challenge_stacks_stack_id_stacks_id_fk",
+          "tableFrom": "challenge_stacks",
+          "tableTo": "stacks",
+          "columnsFrom": ["stack_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "challenge_stacks_challenge_id_stack_id_unique": {
+          "name": "challenge_stacks_challenge_id_stack_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["challenge_id", "stack_id"]
+        }
+      }
+    },
     "public.challenge_versions": {
       "name": "challenge_versions",
       "schema": "",
@@ -139,13 +193,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        },
-        "brief": {
-          "name": "brief",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
         },
         "rubric": {
           "name": "rubric",
@@ -229,6 +276,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {},

@@ -9,7 +9,10 @@
     "test": "tsx --test 'src/**/*.test.ts'"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.632.0",
+    "@forge/db": "0.0.0",
     "@forge/shared": "0.0.0",
+    "pg-boss": "^9.0.3",
     "yaml": "^2.5.0",
     "zod": "^3.23.8"
   },

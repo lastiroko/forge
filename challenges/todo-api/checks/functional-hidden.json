@@ -1,0 +1,17 @@
+[
+  {
+    "name": "mark seeded item done",
+    "request": { "method": "PATCH", "path": "/items/seed-1", "body": { "done": true } },
+    "expect": { "status": 200 }
+  },
+  {
+    "name": "delete second seeded item",
+    "request": { "method": "DELETE", "path": "/items/seed-2" },
+    "expect": { "status": 204 }
+  },
+  {
+    "name": "create item without title is rejected",
+    "request": { "method": "POST", "path": "/items", "body": {} },
+    "expect": { "status": 400 }
+  }
+]
