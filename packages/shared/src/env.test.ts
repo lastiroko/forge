@@ -13,6 +13,10 @@ test('loadEnv returns parsed values for a valid environment', () => {
     S3_SECRET_ACCESS_KEY: 'forgeforge',
     S3_BUCKET: 'forge-reports',
     S3_FORCE_PATH_STYLE: true,
+    SMTP_HOST: 'mailpit',
+    SMTP_PORT: 1025,
+    SMTP_SECURE: false,
+    EMAIL_FROM: 'Forge <notifications@forge.local>',
   });
 });
 
