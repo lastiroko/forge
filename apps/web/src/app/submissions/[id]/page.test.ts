@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import type { User } from '../../../modules/identity/index.js';
 import { subscribeToSubmissionStatus } from './SubmissionStatus.js';
-import { renderSubmissionPage } from './page.js';
+import { renderSubmissionPage } from './render.js';
 
 const { enrollments, submissions, gradingRuns } = schema;
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
