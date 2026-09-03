@@ -13,7 +13,7 @@ import {
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://forge:forge@postgres:5432/forge';
 
 function makeJob(submissionId: string = randomUUID()): GradingJob {
-  return { id: randomUUID(), data: { submissionId } };
+  return { id: randomUUID(), data: { runId: randomUUID(), submissionId } };
 }
 
 async function waitFor(deadlineMs: number, check: () => Promise<boolean>): Promise<void> {
@@ -55,6 +55,7 @@ test('runPipeline runs stages in order and records a status update for every ent
     updates.map((update) => `${update.stage}:${update.status}`),
     ['a:started', 'a:passed', 'b:started', 'b:passed'],
   );
+  assert.ok(updates.every((update) => update.runId === updates[0].runId));
 });
 
 test('runPipeline waits for a stage to resolve before starting the next one', async () => {
@@ -101,7 +102,7 @@ test('runPipeline stops after a member failure without running later stages', as
     },
   };
 
-  await runPipeline(makeJob(), [failingStage, laterStage], (update) => {
+  const result = await runPipeline(makeJob(), [failingStage, laterStage], (update) => {
     updates.push(update);
   });
 
@@ -110,6 +111,7 @@ test('runPipeline stops after a member failure without running later stages', as
     updates.map((update) => `${update.stage}:${update.status}`),
     ['check:started', 'check:member-failure'],
   );
+  assert.equal(result.outcome, 'member-failure');
 });
 
 test('registerGradingWorker retries a throwing platform stage three times before the job fails', async () => {
@@ -128,7 +130,7 @@ test('registerGradingWorker retries a throwing platform stage three times before
 
     await registerGradingWorker(boss, [platformStage], () => {}, { queueName });
 
-    const jobId = await boss.send(queueName, { submissionId: randomUUID() }, { retryLimit: 3, retryDelay: 1 });
+    const jobId = await boss.send(queueName, { runId: randomUUID(), submissionId: randomUUID() }, { retryLimit: 3, retryDelay: 1 });
     assert.ok(jobId);
 
     await waitFor(30_000, async () => {
@@ -158,7 +160,7 @@ test('registerGradingWorker completes a reported member failure without retrying
 
     await registerGradingWorker(boss, [memberStage], () => {}, { queueName });
 
-    const jobId = await boss.send(queueName, { submissionId: randomUUID() }, { retryLimit: 3, retryDelay: 1 });
+    const jobId = await boss.send(queueName, { runId: randomUUID(), submissionId: randomUUID() }, { retryLimit: 3, retryDelay: 1 });
     assert.ok(jobId);
 
     await waitFor(10_000, async () => {
@@ -204,8 +206,8 @@ test('registerGradingWorker processes at most one grading job at a time', async 
       { queueName },
     );
 
-    await boss.send(queueName, { submissionId: randomUUID() });
-    await boss.send(queueName, { submissionId: randomUUID() });
+    await boss.send(queueName, { runId: randomUUID(), submissionId: randomUUID() });
+    await boss.send(queueName, { runId: randomUUID(), submissionId: randomUUID() });
 
     await waitFor(10_000, async () => completed === 2);
 

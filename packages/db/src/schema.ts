@@ -80,8 +80,11 @@ export const gradingRuns = pgTable('grading_runs', {
   id: uuid('id').primaryKey().defaultRandom(),
   submissionId: uuid('submission_id').notNull().references(() => submissions.id),
   status: text('status').notNull(),
-  score: doublePrecision('score').notNull(),
+  score: doublePrecision('score'),
   reportUrl: text('report_url'),
+  currentStage: text('current_stage'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  completionEventSentAt: timestamp('completion_event_sent_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
