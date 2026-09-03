@@ -9,7 +9,15 @@ import {
   type SessionCookieReader,
   type User,
 } from '../identity/index.js';
-import { comment, publish, report, type CommentTarget, type ReportTarget } from './index.js';
+import {
+  comment,
+  getPublishedSolution,
+  listComments,
+  publish,
+  report,
+  type CommentTarget,
+  type ReportTarget,
+} from './index.js';
 
 const {
   users,
@@ -135,6 +143,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>): Promise<vo
       await db.delete(gradingRuns).where(inArray(gradingRuns.submissionId, submissionIds));
       await db.delete(submissions).where(inArray(submissions.id, submissionIds));
     }
+    if (userIds.length > 0) await db.delete(comments).where(inArray(comments.authorId, userIds));
     if (enrollmentIds.length > 0) await db.delete(enrollments).where(inArray(enrollments.id, enrollmentIds));
     if (challengeVersionId) await db.delete(challengeVersions).where(eq(challengeVersions.id, challengeVersionId));
     if (challengeId) await db.delete(challenges).where(eq(challenges.id, challengeId));
@@ -266,5 +275,60 @@ test('rejects nonexistent and unsupported community targets without inserting ro
     await assert.rejects(() => report({ type: 'challenge', id: randomUUID() } as unknown as ReportTarget, 'Unsupported', ownerCookies, databaseUrl), /unsupported/);
     assert.equal((await db.select().from(comments)).filter((row) => row.body === 'Missing' || row.body === 'Unsupported').length, 0);
     assert.equal((await db.select().from(reports)).filter((row) => row.reason === 'Missing' || row.reason === 'Unsupported').length, 0);
+  });
+});
+
+test('lists only comments for the exact target in created-at and id order', async () => {
+  await withFixture(async ({ db, owner, challengeId }) => {
+    const firstId = '00000000-0000-4000-8000-000000000001';
+    const secondId = '00000000-0000-4000-8000-000000000002';
+    const laterId = '00000000-0000-4000-8000-000000000003';
+    const otherId = '00000000-0000-4000-8000-000000000004';
+    const createdAt = new Date('2026-02-01T00:00:00Z');
+    await db.insert(comments).values([
+      { id: laterId, targetType: 'challenge', targetId: challengeId, authorId: owner.id, body: 'Later', createdAt: new Date('2026-02-02T00:00:00Z') },
+      { id: secondId, targetType: 'challenge', targetId: challengeId, authorId: owner.id, body: 'Second at same time', createdAt },
+      { id: firstId, targetType: 'challenge', targetId: challengeId, authorId: owner.id, body: 'First at same time', createdAt },
+      { id: otherId, targetType: 'solution', targetId: challengeId, authorId: owner.id, body: 'Other type', createdAt },
+    ]);
+
+    const rows = await listComments({ type: 'challenge', id: challengeId }, databaseUrl);
+
+    assert.deepEqual(rows.map((row) => row.id), [firstId, secondId, laterId]);
+    assert.deepEqual(rows.map((row) => row.body), ['First at same time', 'Second at same time', 'Later']);
+  });
+});
+
+test('lists solution comments for only the requested solution id', async () => {
+  await withFixture(async ({ db, owner, ownerCookies, createSubmission }) => {
+    const submission = await createSubmission(owner.id, 'successful', 90);
+    const solution = await publish(submission, 'Comment list solution', 'Writeup', ownerCookies, databaseUrl);
+    await db.insert(comments).values([
+      { targetType: 'solution', targetId: solution.id, authorId: owner.id, body: 'Requested solution' },
+      { targetType: 'challenge', targetId: solution.id, authorId: owner.id, body: 'Same id, other type' },
+    ]);
+
+    const rows = await listComments({ type: 'solution', id: solution.id }, databaseUrl);
+
+    assert.deepEqual(rows.map((row) => row.body), ['Requested solution']);
+  });
+});
+
+test('reads published solution details without a session and excludes unpublished solutions', async () => {
+  await withFixture(async ({ db, owner, ownerCookies, createSubmission }) => {
+    const publishedSubmission = await createSubmission(owner.id, 'successful', 94);
+    const published = await publish(publishedSubmission, 'Public solution', 'Public writeup', ownerCookies, databaseUrl);
+    const unpublishedSubmission = await createSubmission(owner.id, 'successful', 85);
+    const [unpublished] = await db.insert(solutions).values({
+      submissionId: unpublishedSubmission.id,
+      title: 'Draft solution',
+      writeup: 'Draft writeup',
+      publishedAt: null,
+    }).returning();
+
+    const detail = await getPublishedSolution(published.id, databaseUrl);
+
+    assert.equal(detail?.title, 'Public solution');
+    assert.equal(await getPublishedSolution(unpublished.id, databaseUrl), undefined);
   });
 });
