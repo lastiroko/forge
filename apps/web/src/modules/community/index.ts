@@ -24,6 +24,17 @@ export type ReportTarget =
   | { type: 'solution'; id: string }
   | { type: 'comment'; id: string };
 
+export type CommentReceivedHandler = (comment: Comment) => Promise<void> | void;
+
+const commentReceivedHandlers = new Set<CommentReceivedHandler>();
+
+export function onCommentReceived(handler: CommentReceivedHandler): () => void {
+  commentReceivedHandlers.add(handler);
+  return () => {
+    commentReceivedHandlers.delete(handler);
+  };
+}
+
 export async function publish(
   submission: Submission,
   title: string,
@@ -93,6 +104,9 @@ export async function comment(
       authorId: user.id,
       body,
     }).returning();
+    if (inserted.targetType === 'solution') {
+      for (const handler of commentReceivedHandlers) await handler(inserted);
+    }
     return inserted;
   } finally {
     await pool.end();
