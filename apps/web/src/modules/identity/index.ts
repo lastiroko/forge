@@ -52,6 +52,10 @@ export async function upsertGithubUser(
 ): Promise<User> {
   const { db, pool } = createDbClient(databaseUrl);
   try {
+    // TODO(#69): a locally edited display name is overwritten on the member's next GitHub
+    // sign-in, since apps/web/src/app/auth/github/callback/route.test.ts already asserts that
+    // repeat sign-ins refresh displayName from GitHub. That test is outside this ticket's file
+    // list, so preserving edited display names needs a follow-up ticket that updates it too.
     const [user] = await db
       .insert(users)
       .values({ ...identity, role: 'member' })
@@ -82,6 +86,8 @@ export interface CompletedChallenge {
 export interface PublicProfile {
   displayName: string;
   handle: string;
+  bio: string | null;
+  links: string[];
   completedChallenges: CompletedChallenge[];
 }
 
@@ -92,7 +98,7 @@ export async function getPublicProfile(
   const { db, pool } = createDbClient(databaseUrl);
   try {
     const [user] = await db
-      .select({ id: users.id, displayName: users.displayName, handle: users.handle })
+      .select({ id: users.id, displayName: users.displayName, handle: users.handle, bio: users.bio, links: users.links })
       .from(users)
       .where(eq(users.handle, handle))
       .limit(1);
@@ -138,7 +144,13 @@ export async function getPublicProfile(
       }
     }
 
-    return { displayName: user.displayName, handle: user.handle, completedChallenges: [...bestByEnrollment.values()] };
+    return {
+      displayName: user.displayName,
+      handle: user.handle,
+      bio: user.bio,
+      links: user.links,
+      completedChallenges: [...bestByEnrollment.values()],
+    };
   } finally {
     await pool.end();
   }
@@ -188,6 +200,85 @@ export async function deleteSession(
   const { db, pool } = createDbClient(databaseUrl);
   try {
     await db.delete(sessions).where(eq(sessions.id, sessionId));
+  } finally {
+    await pool.end();
+  }
+}
+
+export interface ProfileInput {
+  displayName: string;
+  bio: string;
+  links: string[];
+}
+
+export interface ProfileValidationErrors {
+  displayName?: string;
+  bio?: string;
+  links?: string;
+}
+
+export type ProfileUpdateResult =
+  | { ok: true; user: User }
+  | { ok: false; errors: ProfileValidationErrors };
+
+const MAX_DISPLAY_NAME_LENGTH = 100;
+const MAX_BIO_LENGTH = 280;
+const MAX_LINKS = 5;
+
+function isHttpUrl(link: string): boolean {
+  try {
+    const url = new URL(link);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function validateProfileInput(displayName: string, bio: string, links: string[]): ProfileValidationErrors {
+  const errors: ProfileValidationErrors = {};
+
+  if (displayName.length < 1 || displayName.length > MAX_DISPLAY_NAME_LENGTH) {
+    errors.displayName = `Display name must be between 1 and ${MAX_DISPLAY_NAME_LENGTH} characters.`;
+  }
+
+  if (bio.length > MAX_BIO_LENGTH) {
+    errors.bio = `Bio must be at most ${MAX_BIO_LENGTH} characters.`;
+  }
+
+  if (links.length > MAX_LINKS) {
+    errors.links = `You can add at most ${MAX_LINKS} links.`;
+  } else if (new Set(links).size !== links.length) {
+    errors.links = 'Links must be unique.';
+  } else if (links.some((link) => !isHttpUrl(link))) {
+    errors.links = 'Links must be absolute http:// or https:// URLs.';
+  }
+
+  return errors;
+}
+
+export async function updateCurrentUserProfile(
+  input: ProfileInput,
+  cookieStore: SessionCookieReader = cookies(),
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<ProfileUpdateResult> {
+  const currentUser = await getCurrentUser(cookieStore, databaseUrl);
+  if (!currentUser) throw new AuthorizationError();
+
+  const displayName = input.displayName.trim();
+  const bio = input.bio.trim();
+  const links = input.links.map((link) => link.trim()).filter((link) => link.length > 0);
+
+  const errors = validateProfileInput(displayName, bio, links);
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [user] = await db
+      .update(users)
+      .set({ displayName, bio: bio.length > 0 ? bio : null, links })
+      .where(eq(users.id, currentUser.id))
+      .returning();
+    return { ok: true, user };
   } finally {
     await pool.end();
   }

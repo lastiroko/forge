@@ -11,6 +11,8 @@ export const users = appSchema.table('users', {
   avatarUrl: text('avatar_url'),
   email: text('email').notNull(),
   role: text('role').notNull(),
+  bio: text('bio'),
+  links: jsonb('links').$type<string[]>().notNull().default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   githubIdUnique: uniqueIndex('users_github_id_unique').on(table.githubId),

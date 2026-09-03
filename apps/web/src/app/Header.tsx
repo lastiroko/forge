@@ -9,6 +9,7 @@ export async function Header() {
   return (
     <header>
       <a href="/">Forge</a>
+      {user ? <a href="/settings/profile">Settings</a> : null}
       {notifications ? <NotificationList initialNotifications={notifications} /> : null}
     </header>
   );

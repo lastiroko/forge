@@ -75,3 +75,51 @@ test('inserts a user and a session referencing it and reads both back', async ()
     await pool.end();
   }
 });
+
+test('a user round-trips bio and links, defaulting links to an empty array when omitted', async () => {
+  const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
+  const { db, pool } = createDbClient(databaseUrl);
+  let insertedUser;
+  let defaultUser;
+  try {
+    [insertedUser] = await db
+      .insert(users)
+      .values({
+        githubId: 12346,
+        handle: 'bio-links-user',
+        displayName: 'Bio Links User',
+        email: 'bio-links@example.com',
+        role: 'member',
+        bio: 'Backend engineer who likes Postgres.',
+        links: ['https://example.com', 'https://github.com/octocat'],
+      })
+      .returning();
+
+    [defaultUser] = await db
+      .insert(users)
+      .values({
+        githubId: 12347,
+        handle: 'no-links-user',
+        displayName: 'No Links User',
+        email: 'no-links@example.com',
+        role: 'member',
+      })
+      .returning();
+
+    const [userRow] = await db.select().from(users).where(eq(users.id, insertedUser.id));
+    const [defaultRow] = await db.select().from(users).where(eq(users.id, defaultUser.id));
+
+    assert.equal(userRow.bio, 'Backend engineer who likes Postgres.');
+    assert.deepEqual(userRow.links, ['https://example.com', 'https://github.com/octocat']);
+    assert.equal(defaultRow.bio, null);
+    assert.deepEqual(defaultRow.links, []);
+  } finally {
+    if (insertedUser) {
+      await db.delete(users).where(eq(users.id, insertedUser.id));
+    }
+    if (defaultUser) {
+      await db.delete(users).where(eq(users.id, defaultUser.id));
+    }
+    await pool.end();
+  }
+});

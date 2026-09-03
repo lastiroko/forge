@@ -11,6 +11,16 @@ export default async function PublicProfilePage({ params }: { params: { handle: 
     <main>
       <h1>{profile.displayName}</h1>
       <p>@{profile.handle}</p>
+      {profile.bio ? <p>{profile.bio}</p> : null}
+      {profile.links.length > 0 ? (
+        <ul>
+          {profile.links.map((link) => (
+            <li key={link}>
+              <a href={link} target="_blank" rel="noopener noreferrer">{link}</a>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <section>
         <h2>Completed challenges</h2>
         {profile.completedChallenges.length === 0 ? (

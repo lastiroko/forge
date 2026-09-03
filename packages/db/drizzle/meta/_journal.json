@@ -134,6 +134,13 @@
       "when": 1788480200000,
       "tag": "0018_best_grading_run_history",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788480300000,
+      "tag": "0019_add_user_profile_fields",
+      "breakpoints": true
     }
   ]
 }

@@ -11,7 +11,10 @@ test('returns completed challenges with the highest successful score only', asyn
   const { db, pool } = createDbClient(databaseUrl);
   const ids: Record<string, string[]> = { users: [], challenges: [], versions: [], stacks: [], enrollments: [], submissions: [], runs: [] };
   try {
-    const [user] = await db.insert(users).values({ githubId: 56001, handle: 'profile-query', displayName: 'Profile Query', email: 'profile@example.com', role: 'member' }).returning(); ids.users.push(user.id);
+    const [user] = await db.insert(users).values({
+      githubId: 56001, handle: 'profile-query', displayName: 'Profile Query', email: 'profile@example.com', role: 'member',
+      bio: 'Building backend APIs for fun.', links: ['https://example.com', 'https://github.com/profile-query'],
+    }).returning(); ids.users.push(user.id);
     const [challenge] = await db.insert(challenges).values({ title: 'Junior API', level: 'junior' }).returning(); ids.challenges.push(challenge.id);
     const [version] = await db.insert(challengeVersions).values({ challengeId: challenge.id, version: 1, level: 'junior', rubric: {}, openapiRef: 'api.yaml', hiddenTestsRef: 'tests', publishedAt: new Date() }).returning(); ids.versions.push(version.id);
     const [stack] = await db.insert(stacks).values({ language: 'TypeScript', framework: 'Fastify' }).returning(); ids.stacks.push(stack.id);
@@ -32,6 +35,7 @@ test('returns completed challenges with the highest successful score only', asyn
 
     assert.deepEqual(await getPublicProfile('profile-query', databaseUrl), {
       displayName: 'Profile Query', handle: 'profile-query',
+      bio: 'Building backend APIs for fun.', links: ['https://example.com', 'https://github.com/profile-query'],
       completedChallenges: [{ title: 'Junior API', language: 'TypeScript', framework: 'Fastify', mode: 'backend', score: 91.25 }],
     });
     assert.equal(await getPublicProfile('unknown-profile-query', databaseUrl), undefined);
