@@ -31,3 +31,8 @@ export async function runContainer(options: RunContainerOptions): Promise<string
 export async function removeContainer(name: string): Promise<void> {
   await execFileAsync('docker', ['rm', '--force', name]);
 }
+
+export async function getContainerLogs(nameOrId: string): Promise<string> {
+  const { stdout, stderr } = await execFileAsync('docker', ['logs', nameOrId]);
+  return stdout + stderr;
+}
