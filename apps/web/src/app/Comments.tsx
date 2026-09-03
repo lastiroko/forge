@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type FormEvent } from 'react';
+import React, { useRef, useState, type FormEvent } from 'react';
 import type { Comment, CommentTarget } from '../modules/community/index.js';
 import { commentAction } from './comment-actions.js';
 
