@@ -7,6 +7,10 @@ const { users, sessions, enrollments, challengeVersions, challenges, stacks, sub
 
 export type User = typeof users.$inferSelect;
 
+export type AccountExportProfile = Pick<User,
+  'id' | 'githubId' | 'handle' | 'displayName' | 'avatarUrl' | 'email' | 'role' | 'bio' | 'links' | 'createdAt'
+>;
+
 export type Session = typeof sessions.$inferSelect;
 
 export type Role = 'member' | 'author' | 'admin';
@@ -52,6 +56,30 @@ export interface GitHubIdentity {
   displayName: string;
   avatarUrl: string | null;
   email: string;
+}
+
+export async function getAccountExportProfile(
+  userId: string,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<AccountExportProfile | undefined> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [profile] = await db.select({
+      id: users.id,
+      githubId: users.githubId,
+      handle: users.handle,
+      displayName: users.displayName,
+      avatarUrl: users.avatarUrl,
+      email: users.email,
+      role: users.role,
+      bio: users.bio,
+      links: users.links,
+      createdAt: users.createdAt,
+    }).from(users).where(eq(users.id, userId)).limit(1);
+    return profile;
+  } finally {
+    await pool.end();
+  }
 }
 
 export async function upsertGithubUser(

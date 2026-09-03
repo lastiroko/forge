@@ -27,6 +27,11 @@ export default async function Page() {
         ))}
         <button type="submit">Save preferences</button>
       </form>
+      <section>
+        <h2>Account data</h2>
+        <p>Download a copy of your profile, enrollments, submissions, and grading reports.</p>
+        <a href="/account/export" download>Download account data</a>
+      </section>
     </main>
   );
 }
