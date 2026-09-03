@@ -10,7 +10,6 @@ import {
   createSession,
   deleteSession,
   getCurrentUser,
-  requireRole,
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
   type SessionCookieReader,
@@ -191,8 +190,4 @@ test('deleteSession removes the row and invalidates the original cookie', async 
     if (userId) await db.delete(users).where(eq(users.id, userId));
     await pool.end();
   }
-});
-
-test('requireRole rejects because the identity module is a skeleton', async () => {
-  await assert.rejects(() => requireRole('member'), /not implemented/);
 });
