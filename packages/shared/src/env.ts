@@ -33,10 +33,5 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       .join(', ');
     throw new Error('Invalid environment configuration - ' + message);
   }
-  // Keep newly added optional configuration from changing enumeration of the
-  // long-standing environment object while callers migrate to the SMTP fields.
-  for (const key of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'EMAIL_FROM'] as const) {
-    Object.defineProperty(result.data, key, { value: result.data[key], enumerable: false });
-  }
   return result.data;
 }
