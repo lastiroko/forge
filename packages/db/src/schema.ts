@@ -1,4 +1,4 @@
-import { pgTable, pgSchema, uuid, text, bigint, timestamp, integer, boolean, jsonb, numeric, unique } from 'drizzle-orm/pg-core';
+import { pgTable, pgSchema, uuid, text, bigint, timestamp, integer, boolean, jsonb, doublePrecision, unique } from 'drizzle-orm/pg-core';
 
 export const appSchema = pgSchema('app');
 
@@ -79,7 +79,7 @@ export const gradingRuns = pgTable('grading_runs', {
   id: uuid('id').primaryKey().defaultRandom(),
   submissionId: uuid('submission_id').notNull().references(() => submissions.id),
   status: text('status').notNull(),
-  score: numeric('score', { mode: 'number' }).notNull(),
+  score: doublePrecision('score').notNull(),
   reportUrl: text('report_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
