@@ -79,3 +79,20 @@ export async function getEnrollment(
     await pool.end();
   }
 }
+
+export async function abandon(
+  id: string,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<Enrollment | undefined> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [row] = await db
+      .update(enrollments)
+      .set({ status: 'abandoned' })
+      .where(and(eq(enrollments.id, id), eq(enrollments.status, 'active')))
+      .returning();
+    return row;
+  } finally {
+    await pool.end();
+  }
+}
