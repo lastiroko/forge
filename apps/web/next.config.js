@@ -3,6 +3,7 @@ const nextConfig = {
   output: 'standalone',
   experimental: {
     instrumentationHook: true,
+    serverComponentsExternalPackages: ['pg-boss'],
   },
   eslint: {
     ignoreDuringBuilds: true,
