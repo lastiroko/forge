@@ -7,6 +7,7 @@ import {
   registerGradingWorker,
   type GradingJob,
   type PipelineStage,
+  type PipelineResult,
   type StageStatusUpdate,
 } from './pipeline.js';
 
@@ -112,6 +113,28 @@ test('runPipeline stops after a member failure without running later stages', as
     ['check:started', 'check:member-failure'],
   );
   assert.equal(result.outcome, 'member-failure');
+});
+
+test('runPipeline retains all artifact URLs in its successful result and completion callback', async () => {
+  const job = makeJob();
+  let completed: PipelineResult | undefined;
+  const result = await runPipeline(job, [{
+    name: 'report',
+    run: async () => ({
+      outcome: 'passed', score: 91,
+      reportUrl: 'https://artifacts.example/report',
+      buildLogUrl: 'https://artifacts.example/build',
+      appLogUrl: 'https://artifacts.example/app',
+    }),
+  }], () => {}, async (_job, terminal) => { completed = terminal; });
+
+  assert.deepEqual(result, {
+    outcome: 'successful', score: 91,
+    reportUrl: 'https://artifacts.example/report',
+    buildLogUrl: 'https://artifacts.example/build',
+    appLogUrl: 'https://artifacts.example/app',
+  });
+  assert.deepEqual(completed, result);
 });
 
 test('registerGradingWorker retries a throwing platform stage three times before the job fails', async () => {

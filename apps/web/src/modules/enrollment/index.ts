@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
 import {
@@ -7,9 +7,72 @@ import {
   getLatestPublishedVersion,
 } from '../catalogue/index.js';
 
-const { enrollments, challengeVersions } = schema;
+const { enrollments, challengeVersions, submissions, gradingRuns } = schema;
 
 export type Enrollment = typeof enrollments.$inferSelect;
+
+export interface EnrollmentHistoryRun {
+  id: string;
+  status: string;
+  score: number | null;
+  reportUrl: string | null;
+  buildLogUrl: string | null;
+  appLogUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface EnrollmentHistorySubmission {
+  id: string;
+  commitSha: string;
+  status: string;
+  createdAt: Date;
+  runs: EnrollmentHistoryRun[];
+}
+
+export interface EnrollmentHistory {
+  enrollment: Enrollment;
+  submissions: EnrollmentHistorySubmission[];
+}
+
+export async function getEnrollmentHistory(
+  id: string,
+  viewer: { id: string; role: string },
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<EnrollmentHistory | undefined> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [enrollment] = await db.select().from(enrollments).where(eq(enrollments.id, id));
+    if (!enrollment || (viewer.role !== 'admin' && viewer.id !== enrollment.userId)) return undefined;
+
+    const rows = await db.select({ submission: submissions, run: gradingRuns })
+      .from(submissions)
+      .leftJoin(gradingRuns, eq(gradingRuns.submissionId, submissions.id))
+      .where(eq(submissions.enrollmentId, id))
+      .orderBy(desc(submissions.createdAt), desc(submissions.id), desc(gradingRuns.createdAt), desc(gradingRuns.id));
+    const history: EnrollmentHistorySubmission[] = [];
+    for (const row of rows) {
+      let submission = history.find((entry) => entry.id === row.submission.id);
+      if (!submission) {
+        submission = { ...row.submission, runs: [] };
+        history.push(submission);
+      }
+      if (row.run) submission.runs.push({
+        id: row.run.id,
+        status: row.run.status,
+        score: row.run.score,
+        reportUrl: row.run.reportUrl,
+        buildLogUrl: row.run.buildLogUrl,
+        appLogUrl: row.run.appLogUrl,
+        createdAt: row.run.createdAt,
+        updatedAt: row.run.updatedAt,
+      });
+    }
+    return { enrollment, submissions: history };
+  } finally {
+    await pool.end();
+  }
+}
 
 export class InvalidCombinationError extends Error {
   constructor() {

@@ -3,9 +3,9 @@ import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
-import { abandon, getEnrollment, InvalidCombinationError, startChallenge } from './index.js';
+import { abandon, getEnrollment, getEnrollmentHistory, InvalidCombinationError, startChallenge } from './index.js';
 
-const { users, challenges, challengeVersions, stacks, challengeStacks, enrollments } = schema;
+const { users, challenges, challengeVersions, stacks, challengeStacks, enrollments, submissions, gradingRuns } = schema;
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
 const { db, pool } = createDbClient(databaseUrl);
 
@@ -112,4 +112,33 @@ test('startChallenge creates a new enrollment after the previous one was abandon
 test('abandon returns undefined for an id that is not an active enrollment', async () => {
   const result = await abandon(randomUUID(), databaseUrl);
   assert.equal(result, undefined);
+});
+
+test('getEnrollmentHistory authorizes owner and admin and retains submissions without runs', async () => {
+  const [historyEnrollment] = await db.insert(enrollments).values({
+    userId, challengeVersionId: latestVersionId, mode: 'backend', stackId: enabledStackId, status: 'active',
+  }).returning();
+  const created = await db.insert(submissions).values([
+    { enrollmentId: historyEnrollment.id, commitSha: 'history-40', status: 'successful' },
+    { enrollmentId: historyEnrollment.id, commitSha: 'history-90', status: 'successful' },
+    { enrollmentId: historyEnrollment.id, commitSha: 'history-pending', status: 'queued' },
+  ]).returning();
+  const runs = await db.insert(gradingRuns).values(created.slice(0, 2).map((submission, index) => ({
+    submissionId: submission.id, status: 'successful', score: index ? 90 : 40,
+    reportUrl: `https://reports.example/${index}`, buildLogUrl: `https://build.example/${index}`,
+    appLogUrl: `https://app.example/${index}`,
+  }))).returning();
+  try {
+    const owner = await getEnrollmentHistory(historyEnrollment.id, { id: userId, role: 'member' }, databaseUrl);
+    assert.equal(owner?.submissions.length, 3);
+    assert.deepEqual(owner?.submissions.flatMap((submission) => submission.runs.map((run) => run.score)).sort(), [40, 90]);
+    assert.ok(owner?.submissions.some((submission) => submission.runs.length === 0));
+    assert.equal(owner?.submissions.flatMap((submission) => submission.runs)[0].reportUrl.startsWith('https://reports.example/'), true);
+    assert.ok(await getEnrollmentHistory(historyEnrollment.id, { id: randomUUID(), role: 'admin' }, databaseUrl));
+    assert.equal(await getEnrollmentHistory(historyEnrollment.id, { id: randomUUID(), role: 'member' }, databaseUrl), undefined);
+  } finally {
+    for (const run of runs) await db.delete(gradingRuns).where(eq(gradingRuns.id, run.id));
+    for (const submission of created) await db.delete(submissions).where(eq(submissions.id, submission.id));
+    await db.delete(enrollments).where(eq(enrollments.id, historyEnrollment.id));
+  }
 });

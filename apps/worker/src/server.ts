@@ -6,7 +6,7 @@ import { registerLeaderboardSnapshotJob } from './lib/leaderboard-snapshot.js';
 import { registerGradingWorker, type PipelineStage } from './pipeline.js';
 
 export const GRADING_COMPLETED_TOPIC = 'grading-completed';
-const { gradingRuns, submissions } = schema;
+const { enrollments, gradingRuns, submissions } = schema;
 
 export async function registerWorker(
   boss: Awaited<ReturnType<typeof getQueue>>,
@@ -35,14 +35,26 @@ export async function registerWorker(
       const { db, pool } = createDbClient(databaseUrl);
       try {
         const status = result.outcome === 'successful' ? 'successful' : 'failed';
-        const [stored] = await db.update(gradingRuns).set({
-          status,
-          score: result.score,
-          reportUrl: result.reportUrl,
-          updatedAt: sql`greatest(${gradingRuns.updatedAt} + interval '1 millisecond', now())`,
-        }).where(and(eq(gradingRuns.id, job.data.runId), eq(gradingRuns.submissionId, job.data.submissionId))).returning({ id: gradingRuns.id });
-        if (!stored) throw new Error(`Grading worker: run ${job.data.runId} does not match submission ${job.data.submissionId}`);
-        await db.update(submissions).set({ status }).where(eq(submissions.id, job.data.submissionId));
+        await db.transaction(async (tx) => {
+          const [stored] = await tx.update(gradingRuns).set({
+            status,
+            score: result.score,
+            reportUrl: result.reportUrl,
+            buildLogUrl: result.buildLogUrl,
+            appLogUrl: result.appLogUrl,
+            updatedAt: sql`greatest(${gradingRuns.updatedAt} + interval '1 millisecond', now())`,
+          }).where(and(eq(gradingRuns.id, job.data.runId), eq(gradingRuns.submissionId, job.data.submissionId))).returning({ id: gradingRuns.id });
+          if (!stored) throw new Error(`Grading worker: run ${job.data.runId} does not match submission ${job.data.submissionId}`);
+          await tx.update(submissions).set({ status }).where(eq(submissions.id, job.data.submissionId));
+          if (result.outcome === 'successful') {
+            await tx.execute(sql`
+              UPDATE enrollments AS e SET best_grading_run_id = ${job.data.runId}
+              FROM submissions AS s
+              WHERE s.id = ${job.data.submissionId} AND e.id = s.enrollment_id
+                AND (${result.score} > COALESCE((SELECT score FROM grading_runs WHERE id = e.best_grading_run_id), '-Infinity'::float8))
+            `);
+          }
+        });
         await boss.send(
           GRADING_COMPLETED_TOPIC,
           { id: job.data.runId, score: result.score },

@@ -63,11 +63,18 @@ test('registered worker persists supplied stage completion before publishing it'
       assert.equal(stored.status, 'successful');
       assert.equal(stored.score, 94);
       assert.equal(stored.reportUrl, 'https://reports.example/run');
+      assert.equal(stored.buildLogUrl, 'https://logs.example/build');
+      assert.equal(stored.appLogUrl, 'https://logs.example/app');
+      const [owner] = await db.select().from(enrollments).where(eq(enrollments.id, enrollment.id));
+      assert.equal(owner.bestGradingRunId, run.id);
       resolveCompletion();
     });
     await registerWorker(boss, [{
       name: 'report',
-      run: async () => ({ outcome: 'passed', score: 94, reportUrl: 'https://reports.example/run' }),
+      run: async () => ({
+        outcome: 'passed', score: 94, reportUrl: 'https://reports.example/run',
+        buildLogUrl: 'https://logs.example/build', appLogUrl: 'https://logs.example/app',
+      }),
     }], databaseUrl);
     await boss.send('grading', { runId: run.id, submissionId: submission.id });
     await Promise.race([
@@ -75,6 +82,7 @@ test('registered worker persists supplied stage completion before publishing it'
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('completion was not published')), 10_000)),
     ]);
   } finally {
+    if (enrollmentId) await db.update(enrollments).set({ bestGradingRunId: null }).where(eq(enrollments.id, enrollmentId));
     if (runId) await db.delete(gradingRuns).where(eq(gradingRuns.id, runId));
     if (submissionId) await db.delete(submissions).where(eq(submissions.id, submissionId));
     if (enrollmentId) await db.delete(enrollments).where(eq(enrollments.id, enrollmentId));
