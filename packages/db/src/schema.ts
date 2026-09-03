@@ -31,6 +31,7 @@ export const enrollments = pgTable('enrollments', {
   stackId: uuid('stack_id').notNull(),
   repoUrl: text('repo_url'),
   status: text('status').notNull(),
+  bestGradingRunId: uuid('best_grading_run_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -85,6 +86,8 @@ export const gradingRuns = pgTable('grading_runs', {
   status: text('status').notNull(),
   score: doublePrecision('score'),
   reportUrl: text('report_url'),
+  buildLogUrl: text('build_log_url'),
+  appLogUrl: text('app_log_url'),
   currentStage: text('current_stage'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   completionEventSentAt: timestamp('completion_event_sent_at', { withTimezone: true }),
