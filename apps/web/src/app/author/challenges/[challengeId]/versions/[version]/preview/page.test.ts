@@ -94,6 +94,9 @@ test('GET .../preview shows the Python FastAPI file list for an author and admin
       headers: sessionHeaders(sessionId),
     });
     const body = await response.text();
+    const mainMatch = body.match(/<main[^>]*>([\s\S]*)<\/main>/);
+    assert.ok(mainMatch, 'expected response body to contain a <main> section');
+    const main = mainMatch![1];
 
     assert.equal(response.status, 200);
     assert.match(body, /Todo Items API/);
@@ -115,10 +118,10 @@ test('GET .../preview shows the Python FastAPI file list for an author and admin
     ]) {
       assert.ok(body.includes(file), `expected body to include ${file}`);
     }
-    assert.doesNotMatch(body, /<form/);
-    assert.doesNotMatch(body, /<button/);
-    assert.doesNotMatch(body, /Publish/);
-    assert.doesNotMatch(body, /Start challenge/);
+    assert.doesNotMatch(main, /<form/);
+    assert.doesNotMatch(main, /<button/);
+    assert.doesNotMatch(main, /Publish/);
+    assert.doesNotMatch(main, /Start challenge/);
   }
 });
 

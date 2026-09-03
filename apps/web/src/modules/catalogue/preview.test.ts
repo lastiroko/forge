@@ -10,10 +10,10 @@ const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@lo
 test('getDraftVersionForPreview returns the owning challenge and only its linked stacks for a draft version', async () => {
   const { db, pool } = createDbClient(databaseUrl);
   let challengeId = '';
-  let draftVersionId;
-  let linkedStackId;
-  let unlinkedStackId;
-  let challengeStackId;
+  let draftVersionId: string | undefined;
+  let linkedStackId: string | undefined;
+  let unlinkedStackId: string | undefined;
+  let challengeStackId: string | undefined;
   try {
     const [challenge] = await db.insert(challenges).values({ title: 'Preview draft challenge', level: 'junior', contentSlug: 'todo-api' }).returning();
     challengeId = challenge.id;
@@ -49,7 +49,7 @@ test('getDraftVersionForPreview returns the owning challenge and only its linked
 test('getDraftVersionForPreview returns undefined for a published version', async () => {
   const { db, pool } = createDbClient(databaseUrl);
   let challengeId = '';
-  let publishedVersionId;
+  let publishedVersionId: string | undefined;
   try {
     const [challenge] = await db.insert(challenges).values({ title: 'Preview published challenge', level: 'junior', contentSlug: 'todo-api' }).returning();
     challengeId = challenge.id;
@@ -71,7 +71,7 @@ test('getDraftVersionForPreview returns undefined for a published version', asyn
 test('getDraftVersionForPreview returns undefined for a nonexistent or mismatched version', async () => {
   const { db, pool } = createDbClient(databaseUrl);
   let challengeId = '';
-  let draftVersionId;
+  let draftVersionId: string | undefined;
   try {
     const [challenge] = await db.insert(challenges).values({ title: 'Preview mismatch challenge', level: 'junior', contentSlug: 'todo-api' }).returning();
     challengeId = challenge.id;
