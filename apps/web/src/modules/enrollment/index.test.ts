@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
-import { getEnrollment, InvalidCombinationError, startChallenge } from './index.js';
+import { abandon, getEnrollment, InvalidCombinationError, startChallenge } from './index.js';
 
 const { users, challenges, challengeVersions, stacks, challengeStacks, enrollments } = schema;
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
@@ -94,4 +94,22 @@ test('getEnrollment returns a row by id and undefined for an unknown id', async 
   const missing = await getEnrollment(randomUUID(), databaseUrl);
   assert.equal(existing?.id, enrollmentId);
   assert.equal(missing, undefined);
+});
+
+test('abandon marks the active enrollment as abandoned', async () => {
+  const result = await abandon(enrollmentId, databaseUrl);
+  assert.equal(result?.id, enrollmentId);
+  assert.equal(result?.status, 'abandoned');
+});
+
+test('startChallenge creates a new enrollment after the previous one was abandoned', async () => {
+  const result = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl);
+  assert.notEqual(result.id, enrollmentId);
+  assert.equal(result.status, 'active');
+  enrollmentId = result.id;
+});
+
+test('abandon returns undefined for an id that is not an active enrollment', async () => {
+  const result = await abandon(randomUUID(), databaseUrl);
+  assert.equal(result, undefined);
 });
