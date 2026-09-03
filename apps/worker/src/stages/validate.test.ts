@@ -3,6 +3,8 @@ import { strict as assert } from 'node:assert';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { validateWorkspace } from './validate.js';
 
 async function createWorkspace(files: Record<string, string>) {
@@ -69,4 +71,24 @@ test('resolves with the parsed challenge for a valid fixture', async (t) => {
       services: ['postgres'],
     },
   });
+});
+
+test('accepts the todo-api challenge content for the reference solution', async () => {
+  const workspaceDir = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    '..',
+    '..',
+    'challenges',
+    'todo-api',
+    'solutions',
+    'reference',
+  );
+
+  const result = await validateWorkspace(workspaceDir);
+
+  assert.equal(result.challenge.slug, 'todo-api');
+  assert.equal(result.challenge.level, 'junior');
+  assert.deepEqual(result.challenge.services, []);
 });

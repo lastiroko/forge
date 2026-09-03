@@ -1,0 +1,4 @@
+[
+  { "name": "health-status", "method": "GET", "path": "/health" },
+  { "name": "create-item-shape", "method": "POST", "path": "/items", "body": { "title": "Contract check item" } }
+]

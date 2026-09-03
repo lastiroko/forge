@@ -1,0 +1,5 @@
+[
+  { "name": "missing-title", "method": "POST", "path": "/items", "body": {}, "expectedStatuses": [400] },
+  { "name": "unknown-item", "method": "GET", "path": "/items/does-not-exist-either", "expectedStatuses": [404] },
+  { "name": "method-not-allowed-on-collection", "method": "DELETE", "path": "/items", "expectedStatuses": [405] }
+]
