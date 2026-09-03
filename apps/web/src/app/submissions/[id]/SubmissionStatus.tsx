@@ -14,17 +14,12 @@ export function SubmissionStatus({
   const [connectionError, setConnectionError] = useState(false);
 
   useEffect(() => {
-    if (status?.status === 'successful' || status?.status === 'failed') return;
-    const source = new EventSource(`/submissions/${submissionId}/events`);
-    source.addEventListener('status', (event) => {
-      const next = JSON.parse((event as MessageEvent<string>).data) as GradingStatusSnapshot;
+    if (initialStatus?.status === 'successful' || initialStatus?.status === 'failed') return;
+    return subscribeToSubmissionStatus(submissionId, (next) => {
       setStatus(next);
       setConnectionError(false);
-      if (next.status === 'successful' || next.status === 'failed') source.close();
-    });
-    source.onerror = () => setConnectionError(true);
-    return () => source.close();
-  }, [submissionId, status?.status]);
+    }, () => setConnectionError(true));
+  }, [initialStatus?.status, submissionId]);
 
   const terminal = status?.status === 'successful' || status?.status === 'failed';
   const label = terminal
@@ -39,4 +34,26 @@ export function SubmissionStatus({
       {connectionError ? <p role="alert">Live grading updates are temporarily unavailable.</p> : null}
     </section>
   );
+}
+
+interface StatusEventSource {
+  addEventListener(type: string, listener: (event: MessageEvent<string>) => void): void;
+  close(): void;
+  onerror: (() => void) | null;
+}
+
+export function subscribeToSubmissionStatus(
+  submissionId: string,
+  onStatus: (status: GradingStatusSnapshot) => void,
+  onError: () => void,
+  createSource: (url: string) => StatusEventSource = (url) => new EventSource(url),
+): () => void {
+  const source = createSource(`/submissions/${submissionId}/events`);
+  source.addEventListener('status', (event) => {
+    const next = JSON.parse(event.data) as GradingStatusSnapshot;
+    onStatus(next);
+    if (next.status === 'successful' || next.status === 'failed') source.close();
+  });
+  source.onerror = onError;
+  return () => source.close();
 }

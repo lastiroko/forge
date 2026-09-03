@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNotNull } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
 
@@ -54,11 +54,15 @@ export async function getPublicProfile(
         eq(enrollments.userId, user.id),
         eq(enrollments.status, 'completed'),
         eq(gradingRuns.status, 'successful'),
+        isNotNull(gradingRuns.score),
       ))
       .orderBy(asc(enrollments.createdAt), asc(enrollments.id));
 
     const bestByEnrollment = new Map<string, CompletedChallenge>();
     for (const row of rows) {
+      // The query excludes null scores; retain the check so TypeScript and future
+      // query changes preserve the successful-run invariant at this boundary.
+      if (row.score === null) continue;
       const existing = bestByEnrollment.get(row.enrollmentId);
       if (!existing || row.score > existing.score) {
         bestByEnrollment.set(row.enrollmentId, {

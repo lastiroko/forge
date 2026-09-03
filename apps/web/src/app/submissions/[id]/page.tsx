@@ -1,13 +1,23 @@
 import { notFound } from 'next/navigation';
-import { getLatestGradingStatus, getSubmission } from '../../../modules/submissions/index.js';
+import { getCurrentUser, type User } from '../../../modules/identity/index.js';
+import { getLatestGradingStatus, getSubmissionForUser } from '../../../modules/submissions/index.js';
 import { SubmissionStatus } from './SubmissionStatus.js';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SubmissionPage({ params }: { params: { id: string } }) {
-  // TODO: enforce submission ownership once identity exposes a non-throwing
-  // authenticated-user lookup suitable for server pages.
-  const submission = await getSubmission(params.id);
+  let user: User | undefined;
+  try {
+    user = await getCurrentUser();
+  } catch {
+    user = undefined;
+  }
+  if (!user) notFound();
+  return renderSubmissionPage(params.id, user);
+}
+
+export async function renderSubmissionPage(id: string, user: User) {
+  const submission = await getSubmissionForUser(id, user.id);
   if (!submission) notFound();
   const status = await getLatestGradingStatus(submission.id);
 

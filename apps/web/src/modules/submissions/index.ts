@@ -146,3 +146,19 @@ export async function getSubmission(id: string, databaseUrl: string = loadEnv().
     await pool.end();
   }
 }
+
+export async function getSubmissionForUser(
+  id: string,
+  userId: string,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<Submission | undefined> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [row] = await db.select({ submission: submissions }).from(submissions)
+      .innerJoin(enrollments, eq(submissions.enrollmentId, enrollments.id))
+      .where(and(eq(submissions.id, id), eq(enrollments.userId, userId)));
+    return row?.submission;
+  } finally {
+    await pool.end();
+  }
+}
