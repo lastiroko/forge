@@ -9,7 +9,3 @@ export async function registerNode(
 ): Promise<void> {
   await subscribe(handler);
 }
-
-if (process.env.NEXT_RUNTIME === 'nodejs') {
-  await registerNode();
-}
