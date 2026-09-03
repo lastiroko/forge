@@ -17,8 +17,15 @@ export async function waitForHealth(
   const deadline = Date.now() + timeoutMs;
 
   while (true) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      break;
+    }
+
     try {
-      const response = await fetch(new URL('/health', baseUrl));
+      const response = await fetch(new URL('/health', baseUrl), {
+        signal: AbortSignal.timeout(remainingMs),
+      });
       if (response.status === 200) {
         return;
       }
@@ -29,7 +36,8 @@ export async function waitForHealth(
     if (Date.now() >= deadline) {
       break;
     }
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    const delayMs = Math.min(pollIntervalMs, deadline - Date.now());
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
 
   const logs = await getContainerLogs(appContainerId).catch(

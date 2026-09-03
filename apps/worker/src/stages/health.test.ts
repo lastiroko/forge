@@ -63,3 +63,26 @@ test('waitForHealth rejects with a timeout message and captured logs when the ap
   );
   assert.ok(Date.now() - start < 10000);
 });
+
+test('waitForHealth enforces the timeout when a server accepts but never responds', async (t) => {
+  const server = createServer(() => {
+    // Deliberately leave the response open to simulate a hung application.
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+
+  const start = Date.now();
+  await assert.rejects(
+    waitForHealth('http://127.0.0.1:' + port, 'missing-container-id', {
+      timeoutMs: 250,
+      pollIntervalMs: 25,
+    }),
+    /timeout/i,
+  );
+  assert.ok(Date.now() - start < 2000);
+});
