@@ -124,6 +124,62 @@ test('registered worker persists supplied stage completion before publishing it'
   }
 });
 
+test('cancelled run rejects later worker status and completion overwrites', async () => {
+  const { db, pool } = createDbClient(databaseUrl);
+  const boss = await getQueue(databaseUrl);
+  let enrollmentId: string | undefined;
+  let submissionId: string | undefined;
+  let runId: string | undefined;
+  try {
+    const [enrollment] = await db.insert(enrollments).values({
+      userId: randomUUID(), challengeVersionId: randomUUID(), mode: 'backend', stackId: randomUUID(), status: 'active',
+    }).returning();
+    enrollmentId = enrollment.id;
+    const [submission] = await db.insert(submissions).values({ enrollmentId, commitSha: 'worker-cancel', status: 'running' }).returning();
+    submissionId = submission.id;
+    const [run] = await db.insert(gradingRuns).values({ submissionId, status: 'running', currentStage: 'build' }).returning();
+    runId = run.id;
+
+    let completionReceived = false;
+    await boss.work(GRADING_COMPLETED_TOPIC, async (job) => {
+      const data = job.data as { id: string };
+      if (data.id === run.id) completionReceived = true;
+    });
+
+    let stageRan!: () => void;
+    const stageRanPromise = new Promise<void>((resolve) => { stageRan = resolve; });
+
+    await registerWorker(boss, [{
+      name: 'report',
+      run: async () => {
+        await db.update(gradingRuns).set({ status: 'cancelled', updatedAt: new Date() }).where(eq(gradingRuns.id, run.id));
+        await db.update(submissions).set({ status: 'cancelled' }).where(eq(submissions.id, submission.id));
+        stageRan();
+        return {
+          outcome: 'passed', score: 94, reportUrl: 'https://reports.example/run',
+          buildLogUrl: 'https://logs.example/build', appLogUrl: 'https://logs.example/app',
+        };
+      },
+    }], databaseUrl);
+    await boss.send('grading', { runId: run.id, submissionId: submission.id });
+    await stageRanPromise;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const [storedRun] = await db.select().from(gradingRuns).where(eq(gradingRuns.id, run.id));
+    assert.equal(storedRun.status, 'cancelled');
+    assert.equal(storedRun.score, null);
+    const [storedSubmission] = await db.select().from(submissions).where(eq(submissions.id, submission.id));
+    assert.equal(storedSubmission.status, 'cancelled');
+    assert.equal(completionReceived, false);
+  } finally {
+    if (runId) await db.delete(gradingRuns).where(eq(gradingRuns.id, runId));
+    if (submissionId) await db.delete(submissions).where(eq(submissions.id, submissionId));
+    if (enrollmentId) await db.delete(enrollments).where(eq(enrollments.id, enrollmentId));
+    await boss.stop();
+    await pool.end();
+  }
+});
+
 test('registered worker keeps the 90-point run as best regardless of completion order', async () => {
   const { db, pool } = createDbClient(databaseUrl);
   const boss = await getQueue(databaseUrl);

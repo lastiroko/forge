@@ -1,6 +1,6 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import { createDbClient, getQueue, schema } from '@forge/db';
 import { loadEnv, type Env } from '@forge/shared';
 import { registerLeaderboardSnapshotJob } from './lib/leaderboard-snapshot.js';
@@ -56,12 +56,18 @@ export async function registerWorker(
       const { db, pool } = createDbClient(databaseUrl);
       try {
         const runStatus = update.status === 'started' || update.status === 'passed' ? 'running' : 'failed';
-        await db.update(gradingRuns).set({
+        const [stored] = await db.update(gradingRuns).set({
           status: runStatus,
           currentStage: update.stage,
           updatedAt: sql`greatest(${gradingRuns.updatedAt} + interval '1 millisecond', now())`,
-        }).where(and(eq(gradingRuns.id, update.runId), eq(gradingRuns.submissionId, update.submissionId)));
-        await db.update(submissions).set({ status: runStatus }).where(eq(submissions.id, update.submissionId));
+        }).where(and(
+          eq(gradingRuns.id, update.runId),
+          eq(gradingRuns.submissionId, update.submissionId),
+          ne(gradingRuns.status, 'cancelled'),
+        )).returning({ id: gradingRuns.id });
+        if (stored) {
+          await db.update(submissions).set({ status: runStatus }).where(eq(submissions.id, update.submissionId));
+        }
       } finally {
         await pool.end();
       }
@@ -71,6 +77,7 @@ export async function registerWorker(
       const { db, pool } = createDbClient(databaseUrl);
       try {
         const status = result.outcome === 'successful' ? 'successful' : 'failed';
+        let cancelled = false;
         await db.transaction(async (tx) => {
           const [stored] = await tx.update(gradingRuns).set({
             status,
@@ -79,8 +86,19 @@ export async function registerWorker(
             buildLogUrl: result.buildLogUrl,
             appLogUrl: result.appLogUrl,
             updatedAt: sql`greatest(${gradingRuns.updatedAt} + interval '1 millisecond', now())`,
-          }).where(and(eq(gradingRuns.id, job.data.runId), eq(gradingRuns.submissionId, job.data.submissionId))).returning({ id: gradingRuns.id });
-          if (!stored) throw new Error(`Grading worker: run ${job.data.runId} does not match submission ${job.data.submissionId}`);
+          }).where(and(
+            eq(gradingRuns.id, job.data.runId),
+            eq(gradingRuns.submissionId, job.data.submissionId),
+            ne(gradingRuns.status, 'cancelled'),
+          )).returning({ id: gradingRuns.id });
+          if (!stored) {
+            const [current] = await tx.select({ status: gradingRuns.status }).from(gradingRuns).where(eq(gradingRuns.id, job.data.runId));
+            if (current?.status === 'cancelled') {
+              cancelled = true;
+              return;
+            }
+            throw new Error(`Grading worker: run ${job.data.runId} does not match submission ${job.data.submissionId}`);
+          }
           await tx.update(submissions).set({ status }).where(eq(submissions.id, job.data.submissionId));
           if (result.outcome === 'successful') {
             await tx.execute(sql`
@@ -91,6 +109,7 @@ export async function registerWorker(
             `);
           }
         });
+        if (cancelled) return;
         await boss.send(
           GRADING_COMPLETED_TOPIC,
           { id: job.data.runId, score: result.score },

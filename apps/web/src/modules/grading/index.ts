@@ -1,5 +1,5 @@
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { and, asc, eq, isNotNull, isNull, ne } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { createDbClient, getQueue, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
 import type { Submission } from '../submissions/index.js';
@@ -106,8 +106,10 @@ interface CompletionConsumer {
 
 const completionConsumers = new Map<string, Promise<CompletionConsumer>>();
 
-async function publishRun(boss: Awaited<ReturnType<typeof getQueue>>, runId: string, submissionId: string): Promise<void> {
-  await boss.send(GRADING_TOPIC, { runId, submissionId }, { retryLimit: 3 });
+async function publishRun(boss: Awaited<ReturnType<typeof getQueue>>, runId: string, submissionId: string): Promise<string> {
+  const jobId = await boss.send(GRADING_TOPIC, { runId, submissionId }, { retryLimit: 3 });
+  if (!jobId) throw new Error(`Grading module: failed to publish job for run ${runId}`);
+  return jobId;
 }
 
 export async function enqueue(submission: Submission, databaseUrl: string = loadEnv().DATABASE_URL): Promise<GradingRun> {
@@ -115,8 +117,9 @@ export async function enqueue(submission: Submission, databaseUrl: string = load
   const boss = await getQueue(databaseUrl);
   try {
     const [run] = await db.insert(gradingRuns).values({ submissionId: submission.id, status: 'queued' }).returning();
-    await publishRun(boss, run.id, submission.id);
-    return run;
+    const jobId = await publishRun(boss, run.id, submission.id);
+    const [stored] = await db.update(gradingRuns).set({ queueJobId: jobId }).where(eq(gradingRuns.id, run.id)).returning();
+    return stored;
   } finally {
     await boss.stop();
     await pool.end();
@@ -129,16 +132,40 @@ export async function retry(runId: string, databaseUrl: string = loadEnv().DATAB
   try {
     const [run] = await db.select().from(gradingRuns).where(eq(gradingRuns.id, runId));
     if (!run) throw new Error(`Grading module: no run found with id ${runId}`);
-    if (run.status === 'queued' || run.status === 'running') {
-      throw new Error(`Grading module: run ${runId} is active`);
+    if (run.status !== 'failed') {
+      throw new Error(`Grading module: run ${runId} is not failed`);
     }
     const [reset] = await db.update(gradingRuns).set({
       status: 'queued', score: null, reportUrl: null, currentStage: null,
       completionEventSentAt: null, updatedAt: new Date(),
-    }).where(and(eq(gradingRuns.id, runId), ne(gradingRuns.status, 'queued'), ne(gradingRuns.status, 'running'))).returning();
-    if (!reset) throw new Error(`Grading module: run ${runId} became active`);
-    await publishRun(boss, reset.id, reset.submissionId);
-    return reset;
+    }).where(and(eq(gradingRuns.id, runId), eq(gradingRuns.status, 'failed'))).returning();
+    if (!reset) throw new Error(`Grading module: run ${runId} is not failed`);
+    await db.update(submissions).set({ status: 'queued' }).where(eq(submissions.id, reset.submissionId));
+    const jobId = await publishRun(boss, reset.id, reset.submissionId);
+    const [stored] = await db.update(gradingRuns).set({ queueJobId: jobId, updatedAt: new Date() }).where(eq(gradingRuns.id, reset.id)).returning();
+    return stored;
+  } finally {
+    await boss.stop();
+    await pool.end();
+  }
+}
+
+export async function cancel(runId: string, databaseUrl: string = loadEnv().DATABASE_URL): Promise<GradingRun> {
+  const { db, pool } = createDbClient(databaseUrl);
+  const boss = await getQueue(databaseUrl);
+  try {
+    const [run] = await db.select().from(gradingRuns).where(eq(gradingRuns.id, runId));
+    if (!run) throw new Error(`Grading module: no run found with id ${runId}`);
+    if (run.status !== 'running') {
+      throw new Error(`Grading module: run ${runId} is not running`);
+    }
+    if (run.queueJobId) await boss.cancel(run.queueJobId);
+    const [cancelled] = await db.update(gradingRuns).set({
+      status: 'cancelled', updatedAt: new Date(),
+    }).where(and(eq(gradingRuns.id, runId), eq(gradingRuns.status, 'running'))).returning();
+    if (!cancelled) throw new Error(`Grading module: run ${runId} is not running`);
+    await db.update(submissions).set({ status: 'cancelled' }).where(eq(submissions.id, cancelled.submissionId));
+    return cancelled;
   } finally {
     await boss.stop();
     await pool.end();

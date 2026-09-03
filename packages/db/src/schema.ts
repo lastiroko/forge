@@ -99,6 +99,7 @@ export const gradingRuns = pgTable('grading_runs', {
   currentStage: text('current_stage'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   completionEventSentAt: timestamp('completion_event_sent_at', { withTimezone: true }),
+  queueJobId: uuid('queue_job_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
