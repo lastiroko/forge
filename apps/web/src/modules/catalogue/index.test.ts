@@ -44,7 +44,7 @@ test('listChallenges returns only challenges that have a published version', asy
 
 test('getVersion returns the published version but not a draft version', async () => {
   const { db, pool } = createDbClient(databaseUrl);
-  let challengeId;
+  let challengeId = '';
   let publishedVersionId;
   let draftVersionId;
   try {
@@ -93,7 +93,7 @@ test('getChallenge returns the challenge row by id', async () => {
 
 test('listChallenges returns enabled stacks and basePoints for a challenge', async () => {
   const { db, pool } = createDbClient(databaseUrl);
-  let challengeId;
+  let challengeId = '';
   let versionId;
   let stackAId;
   let stackBId;

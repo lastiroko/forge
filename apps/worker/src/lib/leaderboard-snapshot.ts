@@ -34,7 +34,7 @@ export async function recomputeLeaderboardSnapshots(databaseUrl?: string): Promi
     }
 
     const computedAt = new Date();
-    const snapshots = rankTotals(globalTotals).map((ranking, index) => ({
+    const snapshots: Array<typeof leaderboardSnapshots.$inferInsert> = rankTotals(globalTotals).map((ranking, index) => ({
       scope: 'global',
       stackId: null,
       ...ranking,

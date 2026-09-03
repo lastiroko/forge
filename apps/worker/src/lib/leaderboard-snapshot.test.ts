@@ -75,7 +75,7 @@ test('recomputes leaderboard snapshots through pg-boss', async () => {
   const queueName = `leaderboard-snapshot-test-${randomUUID()}`;
   try {
     await registerLeaderboardSnapshotJob(boss, { queueName, databaseUrl });
-    await boss.send(queueName);
+    await boss.send(queueName, {});
 
     const deadline = Date.now() + 10_000;
     while (Date.now() < deadline) {

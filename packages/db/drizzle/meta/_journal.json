@@ -78,6 +78,13 @@
       "when": 1788413020345,
       "tag": "0010_grading_score_number",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788420454586,
+      "tag": "0011_add_challenge_version_brief",
+      "breakpoints": true
     }
   ]
 }
