@@ -142,6 +142,11 @@ export const notifications = pgTable('notifications', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const pointsTotalsCache = pgTable('points_totals_cache', {
+  userId: uuid('user_id').primaryKey(),
+  totalPoints: integer('total_points').notNull(),
+});
+
 export const notificationPreferences = pgTable('notification_preferences', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull(),
