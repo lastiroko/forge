@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { getPublishedSolution, listComments } from '../../../modules/community/index.js';
 import { getCurrentUser } from '../../../modules/identity/index.js';
 import { Comments } from '../../Comments.js';
+import { ReportForm } from '../../ReportForm.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,7 @@ export default async function SolutionPage({ params }: { params: { id: string } 
       {solution.reportUrl ? (
         <p><a href={solution.reportUrl}>Grading report</a></p>
       ) : null}
+      {user ? <ReportForm target={{ type: 'solution', id: solution.id }} /> : null}
       <Comments target={target} initialComments={initialComments} isSignedIn={Boolean(user)} />
     </main>
   );
