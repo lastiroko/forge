@@ -14,7 +14,7 @@ const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..',
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
 const port = 3466;
 const { db, pool } = createDbClient(databaseUrl);
-const boss = await getQueue(databaseUrl);
+let boss: Awaited<ReturnType<typeof getQueue>>;
 const ids = { users: [] as string[], sessions: [] as string[], submissions: [] as string[], runs: [] as string[] };
 const enrollmentId = randomUUID();
 const workerId = randomUUID();
@@ -37,6 +37,7 @@ function queueLength(html: string): number {
 }
 
 before(async () => {
+  boss = await getQueue(databaseUrl);
   const seededUsers = await db.insert(users).values((['admin', 'member'] as const).map((role) => ({
     githubId: Math.floor(Math.random() * 1_000_000_000),
     handle: `admin-route-${role}-${randomUUID()}`,
@@ -76,7 +77,7 @@ before(async () => {
 
 after(async () => {
   if (server) server.kill();
-  if (jobId) await boss.deleteJob(GRADING_TOPIC, jobId);
+  if (jobId) await boss.cancel(GRADING_TOPIC, jobId);
   await boss.stop();
   await db.delete(workerHeartbeats).where(eq(workerHeartbeats.workerId, workerId));
   if (ids.runs.length) await db.delete(gradingRuns).where(inArray(gradingRuns.id, ids.runs));

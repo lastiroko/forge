@@ -148,6 +148,13 @@
       "when": 1788480400000,
       "tag": "0020_add_catalogue_content_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788480500000,
+      "tag": "0021_worker_heartbeats",
+      "breakpoints": true
     }
   ]
 }
