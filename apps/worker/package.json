@@ -6,6 +6,7 @@
   "main": "src/server.ts",
   "scripts": {
     "start": "tsx src/server.ts",
+    "publish:challenge": "tsx src/publish.ts",
     "test": "tsx --test 'src/**/*.test.ts'"
   },
   "dependencies": {
