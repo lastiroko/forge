@@ -13,6 +13,7 @@ export const users = appSchema.table('users', {
   role: text('role').notNull(),
   bio: text('bio'),
   links: jsonb('links').$type<string[]>().notNull().default([]),
+  suspendedAt: timestamp('suspended_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   githubIdUnique: uniqueIndex('users_github_id_unique').on(table.githubId),
@@ -115,6 +116,7 @@ export const solutions = pgTable('solutions', {
   title: text('title').notNull(),
   writeup: text('writeup').notNull(),
   publishedAt: timestamp('published_at', { withTimezone: true }),
+  hiddenAt: timestamp('hidden_at', { withTimezone: true }),
 }, (table) => ({
   solutionsSubmissionUnique: unique().on(table.submissionId),
 }));
@@ -125,6 +127,7 @@ export const comments = pgTable('comments', {
   targetId: uuid('target_id').notNull(),
   authorId: uuid('author_id').notNull().references(() => users.id),
   body: text('body').notNull(),
+  hiddenAt: timestamp('hidden_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

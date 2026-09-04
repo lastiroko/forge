@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
 import { getChallenge } from '../catalogue/index.js';
@@ -122,7 +122,7 @@ export async function listComments(
     return await db
       .select()
       .from(comments)
-      .where(and(eq(comments.targetType, target.type), eq(comments.targetId, target.id)))
+      .where(and(eq(comments.targetType, target.type), eq(comments.targetId, target.id), isNull(comments.hiddenAt)))
       .orderBy(asc(comments.createdAt), asc(comments.id));
   } finally {
     await pool.end();
@@ -188,7 +188,7 @@ export async function listPublishedSolutions(
     const rows = await db
       .select({ id: solutions.id, title: solutions.title, publishedAt: solutions.publishedAt })
       .from(solutions)
-      .where(isNotNull(solutions.publishedAt))
+      .where(and(isNotNull(solutions.publishedAt), isNull(solutions.hiddenAt)))
       .orderBy(desc(solutions.publishedAt));
     return rows.map((row) => ({ id: row.id, title: row.title, publishedAt: row.publishedAt as Date }));
   } finally {
@@ -222,7 +222,7 @@ export async function getPublishedSolution(
       .from(solutions)
       .innerJoin(submissions, eq(solutions.submissionId, submissions.id))
       .innerJoin(enrollments, eq(submissions.enrollmentId, enrollments.id))
-      .where(and(eq(solutions.id, id), isNotNull(solutions.publishedAt)));
+      .where(and(eq(solutions.id, id), isNotNull(solutions.publishedAt), isNull(solutions.hiddenAt)));
   } finally {
     await pool.end();
   }
