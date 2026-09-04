@@ -73,3 +73,24 @@ test('rejects a challenge that declares an unsupported service', async () => {
     return true;
   });
 });
+
+test('S36: the app container runs under the hardened sandbox policy', async (t) => {
+  const result = await startRun('hello-world:latest', makeChallenge([]));
+  t.after(result.teardown);
+
+  const { stdout } = await execFileAsync('docker', [
+    'inspect',
+    result.appContainerId,
+    '--format',
+    '{{.HostConfig.Runtime}}|{{.Config.User}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.Privileged}}|{{json .HostConfig.CapAdd}}|{{json .HostConfig.Binds}}|{{.HostConfig.PidsLimit}}',
+  ]);
+
+  const [runtime, user, readonlyRootfs, privileged, capAdd, binds, pidsLimit] = stdout.trim().split('|');
+  assert.equal(runtime, 'runsc');
+  assert.equal(user, '65532:65532');
+  assert.equal(readonlyRootfs, 'true');
+  assert.equal(privileged, 'false');
+  assert.deepEqual(JSON.parse(capAdd) ?? [], []);
+  assert.deepEqual(JSON.parse(binds) ?? [], []);
+  assert.equal(pidsLimit, '128');
+});

@@ -87,7 +87,10 @@ export async function comment(
   } else if (target.type === 'solution') {
     const { db, pool } = createDbClient(databaseUrl);
     try {
-      const [solution] = await db.select({ id: solutions.id }).from(solutions).where(eq(solutions.id, target.id));
+      const [solution] = await db
+        .select({ id: solutions.id })
+        .from(solutions)
+        .where(and(eq(solutions.id, target.id), isNull(solutions.hiddenAt)));
       if (!solution) throw new Error(`Community module: no solution found with id ${target.id}`);
     } finally {
       await pool.end();
@@ -140,9 +143,15 @@ export async function report(
   try {
     let existing: { id: string } | undefined;
     if (target.type === 'solution') {
-      [existing] = await db.select({ id: solutions.id }).from(solutions).where(eq(solutions.id, target.id));
+      [existing] = await db
+        .select({ id: solutions.id })
+        .from(solutions)
+        .where(and(eq(solutions.id, target.id), isNull(solutions.hiddenAt)));
     } else if (target.type === 'comment') {
-      [existing] = await db.select({ id: comments.id }).from(comments).where(eq(comments.id, target.id));
+      [existing] = await db
+        .select({ id: comments.id })
+        .from(comments)
+        .where(and(eq(comments.id, target.id), isNull(comments.hiddenAt)));
     } else {
       throw new Error('Community module: unsupported report target');
     }

@@ -328,6 +328,43 @@ export async function updateCurrentUserProfile(
   }
 }
 
+// points_ledger.user_id and audit_log.actor_id reference this user's UUID (ADR-009), so
+// deletion never removes the row: it deletes every session and replaces every persisted
+// personal field with fixed anonymous values derived only from the retained UUID.
+export async function deleteCurrentUserAccount(
+  cookieStore: SessionCookieReader = cookies(),
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<User> {
+  const currentUser = await getCurrentUser(cookieStore, databaseUrl);
+  if (!currentUser) throw new AuthorizationError();
+
+  const deletedAt = new Date();
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [user] = await db.transaction(async (transaction) => {
+      await transaction.delete(sessions).where(eq(sessions.userId, currentUser.id));
+      return transaction
+        .update(users)
+        .set({
+          githubId: null,
+          handle: `deleted-${currentUser.id}`,
+          displayName: 'Deleted member',
+          email: `deleted-${currentUser.id}@invalid`,
+          avatarUrl: null,
+          bio: null,
+          links: [],
+          role: 'member',
+          deletedAt,
+        })
+        .where(eq(users.id, currentUser.id))
+        .returning();
+    });
+    return user;
+  } finally {
+    await pool.end();
+  }
+}
+
 export async function requireRole(
   role: Role,
   cookieStore: SessionCookieReader = cookies(),
