@@ -146,10 +146,14 @@ test('abandon marks the active enrollment as abandoned', async () => {
   assert.equal(result?.status, 'abandoned');
 });
 
-test('startChallenge creates a new enrollment after the previous one was abandoned', async () => {
-  const result = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl, githubClient);
+test('startChallenge keeps the existing action path functional without a configured GitHub client', async () => {
+  const callsBefore = { create: createCalls.length, push: pushCalls.length };
+  const result = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl);
   assert.notEqual(result.id, enrollmentId);
   assert.equal(result.status, 'active');
+  assert.equal(result.repoUrl, null);
+  assert.equal(createCalls.length, callsBefore.create);
+  assert.equal(pushCalls.length, callsBefore.push);
   enrollmentId = result.id;
 });
 

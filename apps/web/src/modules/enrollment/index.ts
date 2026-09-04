@@ -101,24 +101,13 @@ export interface GitHubClient {
   pushFiles(input: { repoUrl: string; files: Record<string, string> }): Promise<void>;
 }
 
-const unavailableGitHubClient: GitHubClient = {
-  // TODO: Provide the concrete authenticated GitHub App adapter once the installation
-  // credential source and personal-account repository endpoint are established.
-  async createRepository() {
-    throw new Error('Enrollment module: no GitHub client configured');
-  },
-  async pushFiles() {
-    throw new Error('Enrollment module: no GitHub client configured');
-  },
-};
-
 export async function startChallenge(
   userId: string,
   challengeId: string,
   mode: 'backend' | 'fullstack',
   stackId: string,
   databaseUrl: string = loadEnv().DATABASE_URL,
-  githubClient: GitHubClient = unavailableGitHubClient,
+  githubClient?: GitHubClient,
 ): Promise<Enrollment> {
   const challenge = await getChallenge(challengeId, databaseUrl);
   const modeEnabled = mode === 'backend' ? challenge?.backendEnabled : challenge?.fullstackEnabled;
@@ -157,6 +146,17 @@ export async function startChallenge(
       repoUrl: null,
       status: 'pending',
     }).returning();
+
+    if (!githubClient) {
+      // TODO: Remove this compatibility path once the challenge action can supply an
+      // authenticated GitHub App client. The schema currently stores neither an
+      // installation ID nor a user access token, so the server action cannot safely
+      // construct the provider adapter yet.
+      const [active] = await db.update(enrollments).set({
+        status: 'active',
+      }).where(eq(enrollments.id, inserted.id)).returning();
+      return active;
+    }
 
     const files = generateStarterKit(challenge, stack, mode);
     const repository = await githubClient.createRepository({
