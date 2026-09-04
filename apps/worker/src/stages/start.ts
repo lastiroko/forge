@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Challenge } from '../lib/challenge-schema.js';
 import { createInternalNetwork, runContainer } from '../lib/docker.js';
+import { createSandboxRunOptions } from '../lib/sandbox.js';
 import { generateDatabaseCredentials, type DatabaseCredentials } from '../lib/credentials.js';
 import { teardownRun } from './teardown.js';
 
@@ -51,7 +52,13 @@ export async function startRun(imageTag: string, challenge: Challenge): Promise<
     }
 
     const appName = `forge-run-${runId}-app`;
-    const appContainerId = await runContainer({ image: imageTag, name: appName, network: networkName, env: [] });
+    const appContainerId = await runContainer({
+      image: imageTag,
+      name: appName,
+      network: networkName,
+      env: [],
+      sandbox: createSandboxRunOptions(challenge.level),
+    });
     containerNames.push(appName);
 
     return { runId, networkName, appContainerId, serviceContainerIds, databaseCredentials, teardown: cleanup };
