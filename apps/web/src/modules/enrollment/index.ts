@@ -5,8 +5,14 @@ import {
   getChallenge,
   getEnabledStacks,
   getLatestPublishedVersion,
+  type ChallengeVersion,
+  type Stack,
 } from '../catalogue/index.js';
-import { generateStarterKit } from '../kit-generator/index.js';
+import {
+  deliverStarterKit,
+  type GitHubRepositoryClient,
+  type ZipStorage,
+} from '../kit-generator/index.js';
 
 const { enrollments, challengeVersions, submissions, gradingRuns } = schema;
 
@@ -96,19 +102,40 @@ export class InvalidCombinationError extends Error {
   }
 }
 
-export interface GitHubClient {
-  createRepository(input: { name: string; visibility: 'private' }): Promise<{ repoUrl: string }>;
-  pushFiles(input: { repoUrl: string; files: Record<string, string> }): Promise<void>;
+export type Mode = 'backend' | 'fullstack';
+
+export type BuildStarterFiles = (version: ChallengeVersion, stack: Stack, mode: Mode) => Record<string, string>;
+
+export interface StartChallengeDependencies {
+  githubClient?: GitHubRepositoryClient;
+  zipStorage: ZipStorage;
+  buildStarterFiles: BuildStarterFiles;
+}
+
+export interface StartChallengeResult {
+  enrollment: Enrollment;
+  repoUrl: string | null;
+  downloadUrl: string | null;
+}
+
+const missingGitHubClient: GitHubRepositoryClient = {
+  async createRepository() {
+    throw new Error('Enrollment module: no GitHub client is configured');
+  },
+};
+
+function starterKitDownloadUrl(enrollment: Enrollment): string | null {
+  return enrollment.repoUrl ? null : `/starter-kits/${enrollment.id}`;
 }
 
 export async function startChallenge(
   userId: string,
   challengeId: string,
-  mode: 'backend' | 'fullstack',
+  mode: Mode,
   stackId: string,
+  dependencies: StartChallengeDependencies,
   databaseUrl: string = loadEnv().DATABASE_URL,
-  githubClient?: GitHubClient,
-): Promise<Enrollment> {
+): Promise<StartChallengeResult> {
   const challenge = await getChallenge(challengeId, databaseUrl);
   const modeEnabled = mode === 'backend' ? challenge?.backendEnabled : challenge?.fullstackEnabled;
   const enabledStacks = challenge ? await getEnabledStacks(challengeId, databaseUrl) : [];
@@ -136,7 +163,13 @@ export async function startChallenge(
         ),
       )
       .limit(1);
-    if (existing) return existing.enrollment;
+    if (existing) {
+      return {
+        enrollment: existing.enrollment,
+        repoUrl: existing.enrollment.repoUrl,
+        downloadUrl: starterKitDownloadUrl(existing.enrollment),
+      };
+    }
 
     const [inserted] = await db.insert(enrollments).values({
       userId,
@@ -147,29 +180,74 @@ export async function startChallenge(
       status: 'pending',
     }).returning();
 
-    if (!githubClient) {
-      // TODO: Remove this compatibility path once the challenge action can supply an
-      // authenticated GitHub App client. The schema currently stores neither an
-      // installation ID nor a user access token, so the server action cannot safely
-      // construct the provider adapter yet.
-      const [active] = await db.update(enrollments).set({
-        status: 'active',
-      }).where(eq(enrollments.id, inserted.id)).returning();
-      return active;
-    }
-
-    const files = generateStarterKit(challenge, stack, mode);
-    const repository = await githubClient.createRepository({
-      name: challenge.contentSlug as string,
-      visibility: 'private',
-    });
-    await githubClient.pushFiles({ repoUrl: repository.repoUrl, files });
+    const files = dependencies.buildStarterFiles(version, stack, mode);
+    const delivery = await deliverStarterKit(
+      inserted.id,
+      files,
+      dependencies.githubClient ?? missingGitHubClient,
+      dependencies.zipStorage,
+    );
 
     const [active] = await db.update(enrollments).set({
-      repoUrl: repository.repoUrl,
+      repoUrl: delivery.repoUrl,
       status: 'active',
     }).where(eq(enrollments.id, inserted.id)).returning();
-    return active;
+
+    return {
+      enrollment: active,
+      repoUrl: delivery.repoUrl,
+      downloadUrl: starterKitDownloadUrl(active),
+    };
+  } finally {
+    await pool.end();
+  }
+}
+
+const GITHUB_OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/;
+const GITHUB_REPO_NAME_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+function canonicalizeGitHubRepositoryUrl(input: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' || url.hostname !== 'github.com') return null;
+
+  const segments = url.pathname.split('/').filter((segment) => segment.length > 0);
+  if (segments.length !== 2) return null;
+
+  const [owner, repoSegment] = segments;
+  const repo = repoSegment.replace(/\.git$/, '');
+  if (!GITHUB_OWNER_PATTERN.test(owner) || !GITHUB_REPO_NAME_PATTERN.test(repo)) return null;
+
+  return `https://github.com/${owner}/${repo}`;
+}
+
+export async function attachRepositoryUrl(
+  enrollmentId: string,
+  userId: string,
+  repoUrl: string,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<Enrollment | undefined> {
+  const canonicalUrl = canonicalizeGitHubRepositoryUrl(repoUrl);
+  if (!canonicalUrl) return undefined;
+
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [row] = await db
+      .update(enrollments)
+      .set({ repoUrl: canonicalUrl })
+      .where(
+        and(
+          eq(enrollments.id, enrollmentId),
+          eq(enrollments.userId, userId),
+          eq(enrollments.status, 'active'),
+        ),
+      )
+      .returning();
+    return row;
   } finally {
     await pool.end();
   }
