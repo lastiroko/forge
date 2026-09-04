@@ -27,6 +27,18 @@ export async function runContainer(options: RunContainerOptions): Promise<string
   }
   if (options.sandbox) {
     const { User, HostConfig } = options.sandbox;
+    if (HostConfig.Runtime !== 'runsc') {
+      throw new Error('Sandbox policy must use the runsc runtime');
+    }
+    if (User !== '65532:65532') {
+      throw new Error('Sandbox policy must run as the non-root user 65532:65532');
+    }
+    if (!HostConfig.ReadonlyRootfs) {
+      throw new Error('Sandbox policy must enable a read-only root filesystem');
+    }
+    if (HostConfig.Privileged) {
+      throw new Error('Sandbox policy does not permit privileged mode');
+    }
     if (HostConfig.CapAdd.length > 0) {
       throw new Error('Sandbox policy does not permit adding Linux capabilities');
     }
@@ -40,6 +52,9 @@ export async function runContainer(options: RunContainerOptions): Promise<string
     }
     args.push('--privileged=false');
     args.push('--cap-drop', 'ALL');
+    for (const tmpfs of HostConfig.Tmpfs) {
+      args.push('--tmpfs', tmpfs);
+    }
     args.push('--pids-limit', String(HostConfig.PidsLimit));
     args.push('--storage-opt', `size=${HostConfig.StorageOpt.size}`);
   }
