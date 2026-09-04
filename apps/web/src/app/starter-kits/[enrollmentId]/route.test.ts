@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { Enrollment } from '../../../modules/enrollment/index.js';
 import type { User } from '../../../modules/identity/index.js';
-import { createGetHandler } from './route.js';
+import { createGetHandler } from './handler.js';
 
 const owner = {
   id: 'member-1', githubId: 1, handle: 'member', displayName: 'Member', avatarUrl: null,
