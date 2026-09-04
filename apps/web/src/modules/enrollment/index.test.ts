@@ -36,10 +36,16 @@ const githubClient: GitHubRepositoryClient = {
     createCalls.push(input);
     return repositoryUrl;
   },
+  async readFile() {
+    throw new Error('readFile should not be called during starter-kit delivery');
+  },
 };
 const failingGithubClient: GitHubRepositoryClient = {
   async createRepository() {
     throw new Error('GitHub is unavailable');
+  },
+  async readFile() {
+    throw new Error('readFile should not be called during starter-kit delivery');
   },
 };
 

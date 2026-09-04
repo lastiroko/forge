@@ -122,6 +122,9 @@ const missingGitHubClient: GitHubRepositoryClient = {
   async createRepository() {
     throw new Error('Enrollment module: no GitHub client is configured');
   },
+  async readFile() {
+    throw new Error('Enrollment module: no GitHub client is configured');
+  },
 };
 
 function starterKitDownloadUrl(enrollment: Enrollment): string | null {

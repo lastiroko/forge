@@ -19,6 +19,9 @@ const githubClient: GitHubRepositoryClient = {
   async createRepository(): Promise<string> {
     throw new Error('GitHub repository provisioning is not implemented yet.');
   },
+  async readFile(): Promise<string | undefined> {
+    throw new Error('GitHub repository provisioning is not implemented yet.');
+  },
 };
 
 // TODO(#29 follow-up): no production challenge-content loader (challenge.yml, CI workflow,

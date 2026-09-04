@@ -337,6 +337,7 @@ export async function createZipArchive(files: Record<string, string>): Promise<B
 
 export interface GitHubRepositoryClient {
   createRepository(input: { enrollmentId: string; files: Record<string, string> }): Promise<string>;
+  readFile(input: { repoUrl: string; path: string; commitSha: string }): Promise<string | undefined>;
 }
 
 export interface ZipStorage {

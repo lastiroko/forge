@@ -114,6 +114,9 @@ test('deliverStarterKit returns the GitHub repository URL when creation succeeds
     async createRepository() {
       return 'https://github.com/example/starter-kit';
     },
+    async readFile() {
+      throw new Error('readFile should not be called during starter-kit delivery');
+    },
   };
   const zipStorage: ZipStorage = {
     async upload() {
@@ -134,6 +137,9 @@ test('deliverStarterKit falls back to uploading the identical file map when GitH
   const githubClient: GitHubRepositoryClient = {
     async createRepository() {
       throw new Error('GitHub is unavailable');
+    },
+    async readFile() {
+      throw new Error('readFile should not be called during starter-kit delivery');
     },
   };
 
