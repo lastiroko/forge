@@ -333,6 +333,7 @@ test('appending a returned comment preserves existing comments and places it las
     targetId: publishedSolutionId as string,
     authorId: randomUUID(),
     body: 'Existing',
+    hiddenAt: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
   }];
   const inserted: Comment = {
@@ -341,6 +342,7 @@ test('appending a returned comment preserves existing comments and places it las
     targetId: publishedSolutionId as string,
     authorId: randomUUID(),
     body: 'Inserted',
+    hiddenAt: null,
     createdAt: new Date('2026-01-02T00:00:00Z'),
   };
 
@@ -358,6 +360,7 @@ for (const targetType of ['solution', 'challenge'] as const) {
       targetId: randomUUID(),
       authorId: randomUUID(),
       body: 'Already visible',
+      hiddenAt: null,
       createdAt: new Date('2026-01-01T00:00:00Z'),
     }];
     const inserted: Comment = {

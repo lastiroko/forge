@@ -8,7 +8,8 @@ import { createAccountExportHandler } from './handler.js';
 
 const user = {
   id: 'member-1', githubId: 1, handle: 'member', displayName: 'Member', avatarUrl: null,
-  email: 'member@example.com', role: 'member', bio: null, links: [], createdAt: new Date('2025-01-01T00:00:00Z'),
+  email: 'member@example.com', role: 'member', bio: null, links: [], suspendedAt: null,
+  createdAt: new Date('2025-01-01T00:00:00Z'),
 } satisfies User;
 
 test('authorizes before invoking archive assembly', async () => {
