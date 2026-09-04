@@ -5,7 +5,7 @@ export const appSchema = pgSchema('app');
 
 export const users = appSchema.table('users', {
   id: uuid('id').primaryKey().defaultRandom(),
-  githubId: bigint('github_id', { mode: 'number' }).notNull(),
+  githubId: bigint('github_id', { mode: 'number' }),
   handle: text('handle').notNull(),
   displayName: text('display_name').notNull(),
   avatarUrl: text('avatar_url'),
@@ -14,6 +14,7 @@ export const users = appSchema.table('users', {
   bio: text('bio'),
   links: jsonb('links').$type<string[]>().notNull().default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
   githubIdUnique: uniqueIndex('users_github_id_unique').on(table.githubId),
 }));
