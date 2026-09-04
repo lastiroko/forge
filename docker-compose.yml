@@ -1,3 +1,5 @@
+x-mailpit-ready: &mailpit-ready service_healthy
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -37,6 +39,11 @@ services:
     ports:
       - '8025:8025'
       - '1025:1025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   web:
     build:
@@ -45,19 +52,17 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://forge:forge@postgres:5432/forge}
       PORT: ${PORT:-3000}
-      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
-      S3_REGION: ${S3_REGION:-us-east-1}
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-forge}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-forgeforge}
-      S3_BUCKET: ${S3_BUCKET:-forge-reports}
-      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      EMAIL_FROM: ${EMAIL_FROM:-Forge <notifications@forge.local>}
     ports:
       - '3000:3000'
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_healthy
+      mailpit:
+        condition: *mailpit-ready
 
   worker:
     build:

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import YAML from 'yaml';
 import { createDbClient, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
@@ -175,6 +175,44 @@ export async function getLatestPublishedVersion(
       .orderBy(desc(challengeVersions.version))
       .limit(1);
     return row;
+  } finally {
+    await pool.end();
+  }
+}
+
+export interface DraftVersionForPreview {
+  challenge: Challenge;
+  version: ChallengeVersion;
+  stacks: Stack[];
+}
+
+export async function getDraftVersionForPreview(
+  challengeId: string,
+  version: number,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<DraftVersionForPreview | undefined> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [row] = await db
+      .select({ challenge: challenges, version: challengeVersions })
+      .from(challengeVersions)
+      .innerJoin(challenges, eq(challengeVersions.challengeId, challenges.id))
+      .where(
+        and(
+          eq(challengeVersions.challengeId, challengeId),
+          eq(challengeVersions.version, version),
+          isNull(challengeVersions.publishedAt),
+        ),
+      );
+    if (!row) return undefined;
+
+    const stackRows = await db
+      .select({ stack: stacks })
+      .from(challengeStacks)
+      .innerJoin(stacks, eq(challengeStacks.stackId, stacks.id))
+      .where(eq(challengeStacks.challengeId, challengeId));
+
+    return { challenge: row.challenge, version: row.version, stacks: stackRows.map((r) => r.stack) };
   } finally {
     await pool.end();
   }

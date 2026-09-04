@@ -14,6 +14,13 @@ const envSchema = z.object({
     .string()
     .default('true')
     .transform((v) => v === 'true'),
+  SMTP_HOST: z.string().min(1).default('mailpit'),
+  SMTP_PORT: z.coerce.number().int().positive().max(65535).default(1025),
+  SMTP_SECURE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  EMAIL_FROM: z.string().min(1).default('Forge <notifications@forge.local>'),
 });
 
 export type Env = z.infer<typeof envSchema>;

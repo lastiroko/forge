@@ -1,18 +1,93 @@
-import { and, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
 import {
   getChallenge,
   getEnabledStacks,
   getLatestPublishedVersion,
-  type ChallengeVersion as CatalogueChallengeVersion,
-  type Stack as CatalogueStack,
 } from '../catalogue/index.js';
-import { deliverStarterKit, type GitHubRepositoryClient, type ZipStorage } from '../kit-generator/index.js';
+import { generateStarterKit } from '../kit-generator/index.js';
 
-const { enrollments, challengeVersions } = schema;
+const { enrollments, challengeVersions, submissions, gradingRuns } = schema;
 
 export type Enrollment = typeof enrollments.$inferSelect;
+
+export async function listAccountExportEnrollments(
+  userId: string,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<Enrollment[]> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    return await db.select().from(enrollments)
+      .where(eq(enrollments.userId, userId))
+      .orderBy(asc(enrollments.createdAt), asc(enrollments.id));
+  } finally {
+    await pool.end();
+  }
+}
+
+export interface EnrollmentHistoryRun {
+  id: string;
+  status: string;
+  score: number | null;
+  reportUrl: string | null;
+  buildLogUrl: string | null;
+  appLogUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface EnrollmentHistorySubmission {
+  id: string;
+  commitSha: string;
+  status: string;
+  createdAt: Date;
+  runs: EnrollmentHistoryRun[];
+}
+
+export interface EnrollmentHistory {
+  enrollment: Enrollment;
+  submissions: EnrollmentHistorySubmission[];
+}
+
+export async function getEnrollmentHistory(
+  id: string,
+  viewer: { id: string; role: string },
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<EnrollmentHistory | undefined> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const [enrollment] = await db.select().from(enrollments).where(eq(enrollments.id, id));
+    if (!enrollment || (viewer.role !== 'admin' && viewer.id !== enrollment.userId)) return undefined;
+
+    const rows = await db.select({ submission: submissions, run: gradingRuns })
+      .from(submissions)
+      .leftJoin(gradingRuns, eq(gradingRuns.submissionId, submissions.id))
+      .where(eq(submissions.enrollmentId, id))
+      .orderBy(desc(submissions.createdAt), desc(submissions.id), desc(gradingRuns.createdAt), desc(gradingRuns.id));
+    const history: EnrollmentHistorySubmission[] = [];
+    for (const row of rows) {
+      let submission = history.find((entry) => entry.id === row.submission.id);
+      if (!submission) {
+        submission = { ...row.submission, runs: [] };
+        history.push(submission);
+      }
+      if (row.run) submission.runs.push({
+        id: row.run.id,
+        status: row.run.status,
+        score: row.run.score,
+        reportUrl: row.run.reportUrl,
+        buildLogUrl: row.run.buildLogUrl,
+        appLogUrl: row.run.appLogUrl,
+        createdAt: row.run.createdAt,
+        updatedAt: row.run.updatedAt,
+      });
+    }
+    return { enrollment, submissions: history };
+  } finally {
+    await pool.end();
+  }
+}
 
 export class InvalidCombinationError extends Error {
   constructor() {
@@ -21,29 +96,9 @@ export class InvalidCombinationError extends Error {
   }
 }
 
-export class InvalidRepositoryUrlError extends Error {
-  constructor() {
-    super('The repository URL must be an absolute https://github.com/<owner>/<repo> URL.');
-    this.name = 'InvalidRepositoryUrlError';
-  }
-}
-
-export type BuildStarterFiles = (
-  version: CatalogueChallengeVersion,
-  stack: CatalogueStack,
-  mode: 'backend' | 'fullstack',
-) => Record<string, string>;
-
-export interface StartChallengeDependencies {
-  githubClient: GitHubRepositoryClient;
-  zipStorage: ZipStorage;
-  buildStarterFiles: BuildStarterFiles;
-}
-
-export interface StartChallengeResult {
-  enrollment: Enrollment;
-  repoUrl: string | null;
-  downloadUrl: string | null;
+export interface GitHubClient {
+  createRepository(input: { name: string; visibility: 'private' }): Promise<{ repoUrl: string }>;
+  pushFiles(input: { repoUrl: string; files: Record<string, string> }): Promise<void>;
 }
 
 export async function startChallenge(
@@ -51,9 +106,9 @@ export async function startChallenge(
   challengeId: string,
   mode: 'backend' | 'fullstack',
   stackId: string,
-  dependencies: StartChallengeDependencies,
   databaseUrl: string = loadEnv().DATABASE_URL,
-): Promise<StartChallengeResult> {
+  githubClient?: GitHubClient,
+): Promise<Enrollment> {
   const challenge = await getChallenge(challengeId, databaseUrl);
   const modeEnabled = mode === 'backend' ? challenge?.backendEnabled : challenge?.fullstackEnabled;
   const enabledStacks = challenge ? await getEnabledStacks(challengeId, databaseUrl) : [];
@@ -81,68 +136,40 @@ export async function startChallenge(
         ),
       )
       .limit(1);
+    if (existing) return existing.enrollment;
 
-    let enrollment = existing?.enrollment;
-    if (!enrollment) {
-      const [inserted] = await db.insert(enrollments).values({
-        userId,
-        challengeVersionId: version.id,
-        mode,
-        stackId,
-        repoUrl: null,
+    const [inserted] = await db.insert(enrollments).values({
+      userId,
+      challengeVersionId: version.id,
+      mode,
+      stackId,
+      repoUrl: null,
+      status: 'pending',
+    }).returning();
+
+    if (!githubClient) {
+      // TODO: Remove this compatibility path once the challenge action can supply an
+      // authenticated GitHub App client. The schema currently stores neither an
+      // installation ID nor a user access token, so the server action cannot safely
+      // construct the provider adapter yet.
+      const [active] = await db.update(enrollments).set({
         status: 'active',
-      }).returning();
-      enrollment = inserted;
+      }).where(eq(enrollments.id, inserted.id)).returning();
+      return active;
     }
 
-    if (enrollment.repoUrl) {
-      return { enrollment, repoUrl: enrollment.repoUrl, downloadUrl: null };
-    }
+    const files = generateStarterKit(challenge, stack, mode);
+    const repository = await githubClient.createRepository({
+      name: challenge.contentSlug as string,
+      visibility: 'private',
+    });
+    await githubClient.pushFiles({ repoUrl: repository.repoUrl, files });
 
-    const files = dependencies.buildStarterFiles(version, stack, mode);
-    const delivery = await deliverStarterKit(enrollment.id, files, dependencies.githubClient, dependencies.zipStorage);
-
-    if (delivery.repoUrl) {
-      const [updated] = await db
-        .update(enrollments)
-        .set({ repoUrl: delivery.repoUrl })
-        .where(eq(enrollments.id, enrollment.id))
-        .returning();
-      enrollment = updated;
-    }
-
-    return { enrollment, repoUrl: delivery.repoUrl, downloadUrl: delivery.downloadUrl };
-  } finally {
-    await pool.end();
-  }
-}
-
-const GITHUB_REPO_URL_PATTERN = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/;
-
-export async function attachRepositoryUrl(
-  enrollmentId: string,
-  userId: string,
-  repoUrl: string,
-  databaseUrl: string = loadEnv().DATABASE_URL,
-): Promise<Enrollment | undefined> {
-  if (!GITHUB_REPO_URL_PATTERN.test(repoUrl)) {
-    throw new InvalidRepositoryUrlError();
-  }
-
-  const { db, pool } = createDbClient(databaseUrl);
-  try {
-    const [row] = await db
-      .update(enrollments)
-      .set({ repoUrl })
-      .where(
-        and(
-          eq(enrollments.id, enrollmentId),
-          eq(enrollments.userId, userId),
-          eq(enrollments.status, 'active'),
-        ),
-      )
-      .returning();
-    return row;
+    const [active] = await db.update(enrollments).set({
+      repoUrl: repository.repoUrl,
+      status: 'active',
+    }).where(eq(enrollments.id, inserted.id)).returning();
+    return active;
   } finally {
     await pool.end();
   }

@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { eq } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
 import { getChallenge } from '../catalogue/index.js';
@@ -10,7 +10,7 @@ import {
   type Submission,
 } from '../submissions/index.js';
 
-const { solutions, comments, reports } = schema;
+const { solutions, comments, reports, submissions, enrollments } = schema;
 
 export type Solution = typeof solutions.$inferSelect;
 export type Comment = typeof comments.$inferSelect;
@@ -23,6 +23,17 @@ export type CommentTarget =
 export type ReportTarget =
   | { type: 'solution'; id: string }
   | { type: 'comment'; id: string };
+
+export type CommentReceivedHandler = (comment: Comment) => Promise<void> | void;
+
+const commentReceivedHandlers = new Set<CommentReceivedHandler>();
+
+export function onCommentReceived(handler: CommentReceivedHandler): () => void {
+  commentReceivedHandlers.add(handler);
+  return () => {
+    commentReceivedHandlers.delete(handler);
+  };
+}
 
 export async function publish(
   submission: Submission,
@@ -93,7 +104,26 @@ export async function comment(
       authorId: user.id,
       body,
     }).returning();
+    if (inserted.targetType === 'solution') {
+      for (const handler of commentReceivedHandlers) await handler(inserted);
+    }
     return inserted;
+  } finally {
+    await pool.end();
+  }
+}
+
+export async function listComments(
+  target: CommentTarget,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<Comment[]> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    return await db
+      .select()
+      .from(comments)
+      .where(and(eq(comments.targetType, target.type), eq(comments.targetId, target.id)))
+      .orderBy(asc(comments.createdAt), asc(comments.id));
   } finally {
     await pool.end();
   }
@@ -130,4 +160,83 @@ export async function report(
   } finally {
     await pool.end();
   }
+}
+
+export interface SolutionGalleryEntry {
+  id: string;
+  title: string;
+  publishedAt: Date;
+}
+
+export interface PublishedSolutionDetail {
+  id: string;
+  title: string;
+  writeup: string;
+  publishedAt: Date;
+  repoUrl: string | null;
+  score: number | null;
+  reportUrl: string | null;
+}
+
+export async function listPublishedSolutions(
+  cookieStore: SessionCookieReader = cookies(),
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<SolutionGalleryEntry[]> {
+  await requireRole('member', cookieStore, databaseUrl);
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const rows = await db
+      .select({ id: solutions.id, title: solutions.title, publishedAt: solutions.publishedAt })
+      .from(solutions)
+      .where(isNotNull(solutions.publishedAt))
+      .orderBy(desc(solutions.publishedAt));
+    return rows.map((row) => ({ id: row.id, title: row.title, publishedAt: row.publishedAt as Date }));
+  } finally {
+    await pool.end();
+  }
+}
+
+export async function getPublishedSolution(
+  id: string,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<PublishedSolutionDetail | undefined> {
+  const { db, pool } = createDbClient(databaseUrl);
+  let row: {
+    id: string;
+    title: string;
+    writeup: string;
+    publishedAt: Date | null;
+    submissionId: string;
+    repoUrl: string | null;
+  } | undefined;
+  try {
+    [row] = await db
+      .select({
+        id: solutions.id,
+        title: solutions.title,
+        writeup: solutions.writeup,
+        publishedAt: solutions.publishedAt,
+        submissionId: solutions.submissionId,
+        repoUrl: enrollments.repoUrl,
+      })
+      .from(solutions)
+      .innerJoin(submissions, eq(solutions.submissionId, submissions.id))
+      .innerJoin(enrollments, eq(submissions.enrollmentId, enrollments.id))
+      .where(and(eq(solutions.id, id), isNotNull(solutions.publishedAt)));
+  } finally {
+    await pool.end();
+  }
+  if (!row) return undefined;
+
+  const gradingStatus = await getLatestGradingStatus(row.submissionId, databaseUrl);
+
+  return {
+    id: row.id,
+    title: row.title,
+    writeup: row.writeup,
+    publishedAt: row.publishedAt as Date,
+    repoUrl: row.repoUrl,
+    score: gradingStatus?.score ?? null,
+    reportUrl: gradingStatus?.reportUrl ?? null,
+  };
 }

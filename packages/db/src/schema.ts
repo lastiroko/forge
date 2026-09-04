@@ -11,6 +11,8 @@ export const users = appSchema.table('users', {
   avatarUrl: text('avatar_url'),
   email: text('email').notNull(),
   role: text('role').notNull(),
+  bio: text('bio'),
+  links: jsonb('links').$type<string[]>().notNull().default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   githubIdUnique: uniqueIndex('users_github_id_unique').on(table.githubId),
@@ -31,6 +33,7 @@ export const enrollments = pgTable('enrollments', {
   stackId: uuid('stack_id').notNull(),
   repoUrl: text('repo_url'),
   status: text('status').notNull(),
+  bestGradingRunId: uuid('best_grading_run_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -38,7 +41,10 @@ export const stacks = pgTable('stacks', {
   id: uuid('id').primaryKey().defaultRandom(),
   language: text('language').notNull(),
   framework: text('framework').notNull(),
-});
+  templateKey: text('template_key'),
+}, (table) => ({
+  templateKeyUnique: uniqueIndex('stacks_template_key_unique').on(table.templateKey),
+}));
 
 export const challenges = pgTable('challenges', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -46,8 +52,11 @@ export const challenges = pgTable('challenges', {
   level: text('level').notNull(),
   backendEnabled: boolean('backend_enabled').notNull().default(true),
   fullstackEnabled: boolean('fullstack_enabled').notNull().default(false),
+  contentSlug: text('content_slug'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  contentSlugUnique: uniqueIndex('challenges_content_slug_unique').on(table.contentSlug),
+}));
 
 export const challengeStacks = pgTable('challenge_stacks', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -85,10 +94,19 @@ export const gradingRuns = pgTable('grading_runs', {
   status: text('status').notNull(),
   score: doublePrecision('score'),
   reportUrl: text('report_url'),
+  buildLogUrl: text('build_log_url'),
+  appLogUrl: text('app_log_url'),
   currentStage: text('current_stage'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   completionEventSentAt: timestamp('completion_event_sent_at', { withTimezone: true }),
+  queueJobId: uuid('queue_job_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const workerHeartbeats = pgTable('worker_heartbeats', {
+  workerId: uuid('worker_id').primaryKey(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  lastHeartbeatAt: timestamp('last_heartbeat_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const solutions = pgTable('solutions', {
