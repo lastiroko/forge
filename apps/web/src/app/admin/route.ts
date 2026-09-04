@@ -1,4 +1,5 @@
 import { isAuthorizationError } from '../../modules/identity/index.js';
+import { hideContent, suspendMember, warnMember } from '../../modules/admin/index.js';
 import {
   cancelGradingRun, getAdminOperations, retryGradingRun, type OperationsRun, type WorkerHeartbeat,
 } from '../../modules/operations/index.js';
@@ -35,7 +36,8 @@ function renderWorkers(workers: WorkerHeartbeat[]): string {
 export async function GET(): Promise<Response> {
   try {
     const operations = await getAdminOperations();
-    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Admin operations</title></head><body><main><h1>Admin operations</h1><section aria-labelledby="queue"><h2 id="queue">Grading queue</h2><p>Queued jobs: <output data-queue-length>${escapeHtml(operations.queueLength)}</output></p></section><section aria-labelledby="running"><h2 id="running">Running grading jobs</h2>${renderRuns(operations.runningRuns, 'No grading jobs are currently running.', 'cancel')}</section><section aria-labelledby="workers"><h2 id="workers">Worker heartbeats</h2>${renderWorkers(operations.workers)}</section><section aria-labelledby="failures"><h2 id="failures">Recent failed runs</h2>${renderRuns(operations.failedRuns, 'No failed grading runs were found.', 'retry')}</section></main></body></html>`;
+    const moderationForm = (action: string, heading: string) => `<form method="post" action="/admin"><h3>${heading}</h3><input type="hidden" name="action" value="${action}"><label>Target ID <input name="targetId" required></label><label>Reason <textarea name="reason" required></textarea></label><button type="submit">Submit</button></form>`;
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Admin operations</title></head><body><main><h1>Admin operations</h1><section aria-labelledby="moderation"><h2 id="moderation">Content moderation</h2>${moderationForm('hide-solution', 'Hide solution')}${moderationForm('hide-comment', 'Hide comment')}${moderationForm('warn-member', 'Warn member')}${moderationForm('suspend-member', 'Suspend member')}</section><section aria-labelledby="queue"><h2 id="queue">Grading queue</h2><p>Queued jobs: <output data-queue-length>${escapeHtml(operations.queueLength)}</output></p></section><section aria-labelledby="running"><h2 id="running">Running grading jobs</h2>${renderRuns(operations.runningRuns, 'No grading jobs are currently running.', 'cancel')}</section><section aria-labelledby="workers"><h2 id="workers">Worker heartbeats</h2>${renderWorkers(operations.workers)}</section><section aria-labelledby="failures"><h2 id="failures">Recent failed runs</h2>${renderRuns(operations.failedRuns, 'No failed grading runs were found.', 'retry')}</section></main></body></html>`;
     return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   } catch (error) {
     if (isAuthorizationError(error)) return new Response('Forbidden', { status: 403 });
@@ -46,14 +48,26 @@ export async function GET(): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   const form = await request.formData();
   const action = form.get('action');
+  if (action !== 'retry' && action !== 'cancel' && action !== 'hide-solution' && action !== 'hide-comment' && action !== 'warn-member' && action !== 'suspend-member') {
+    return new Response('Bad Request', { status: 400 });
+  }
+
   const runId = form.get('runId');
-  if (typeof runId !== 'string' || runId.length === 0 || (action !== 'retry' && action !== 'cancel')) {
+  const targetId = form.get('targetId');
+  const reason = form.get('reason');
+  if ((action === 'retry' || action === 'cancel')
+    ? typeof runId !== 'string' || runId.trim().length === 0
+    : typeof targetId !== 'string' || targetId.trim().length === 0 || typeof reason !== 'string' || reason.trim().length === 0) {
     return new Response('Bad Request', { status: 400 });
   }
 
   try {
-    if (action === 'retry') await retryGradingRun(runId);
-    else await cancelGradingRun(runId);
+    if (action === 'retry') await retryGradingRun((runId as string).trim());
+    else if (action === 'cancel') await cancelGradingRun((runId as string).trim());
+    else if (action === 'hide-solution') await hideContent({ type: 'solution', id: (targetId as string).trim() }, reason as string);
+    else if (action === 'hide-comment') await hideContent({ type: 'comment', id: (targetId as string).trim() }, reason as string);
+    else if (action === 'warn-member') await warnMember((targetId as string).trim(), reason as string);
+    else await suspendMember((targetId as string).trim(), reason as string);
   } catch (error) {
     if (isAuthorizationError(error)) return new Response('Forbidden', { status: 403 });
     throw error;

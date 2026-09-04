@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
 import { getChallenge } from '../catalogue/index.js';
@@ -87,7 +87,10 @@ export async function comment(
   } else if (target.type === 'solution') {
     const { db, pool } = createDbClient(databaseUrl);
     try {
-      const [solution] = await db.select({ id: solutions.id }).from(solutions).where(eq(solutions.id, target.id));
+      const [solution] = await db
+        .select({ id: solutions.id })
+        .from(solutions)
+        .where(and(eq(solutions.id, target.id), isNull(solutions.hiddenAt)));
       if (!solution) throw new Error(`Community module: no solution found with id ${target.id}`);
     } finally {
       await pool.end();
@@ -122,7 +125,7 @@ export async function listComments(
     return await db
       .select()
       .from(comments)
-      .where(and(eq(comments.targetType, target.type), eq(comments.targetId, target.id)))
+      .where(and(eq(comments.targetType, target.type), eq(comments.targetId, target.id), isNull(comments.hiddenAt)))
       .orderBy(asc(comments.createdAt), asc(comments.id));
   } finally {
     await pool.end();
@@ -140,9 +143,15 @@ export async function report(
   try {
     let existing: { id: string } | undefined;
     if (target.type === 'solution') {
-      [existing] = await db.select({ id: solutions.id }).from(solutions).where(eq(solutions.id, target.id));
+      [existing] = await db
+        .select({ id: solutions.id })
+        .from(solutions)
+        .where(and(eq(solutions.id, target.id), isNull(solutions.hiddenAt)));
     } else if (target.type === 'comment') {
-      [existing] = await db.select({ id: comments.id }).from(comments).where(eq(comments.id, target.id));
+      [existing] = await db
+        .select({ id: comments.id })
+        .from(comments)
+        .where(and(eq(comments.id, target.id), isNull(comments.hiddenAt)));
     } else {
       throw new Error('Community module: unsupported report target');
     }
@@ -188,7 +197,7 @@ export async function listPublishedSolutions(
     const rows = await db
       .select({ id: solutions.id, title: solutions.title, publishedAt: solutions.publishedAt })
       .from(solutions)
-      .where(isNotNull(solutions.publishedAt))
+      .where(and(isNotNull(solutions.publishedAt), isNull(solutions.hiddenAt)))
       .orderBy(desc(solutions.publishedAt));
     return rows.map((row) => ({ id: row.id, title: row.title, publishedAt: row.publishedAt as Date }));
   } finally {
@@ -222,7 +231,7 @@ export async function getPublishedSolution(
       .from(solutions)
       .innerJoin(submissions, eq(solutions.submissionId, submissions.id))
       .innerJoin(enrollments, eq(submissions.enrollmentId, enrollments.id))
-      .where(and(eq(solutions.id, id), isNotNull(solutions.publishedAt)));
+      .where(and(eq(solutions.id, id), isNotNull(solutions.publishedAt), isNull(solutions.hiddenAt)));
   } finally {
     await pool.end();
   }

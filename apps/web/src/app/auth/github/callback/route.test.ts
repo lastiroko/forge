@@ -170,7 +170,7 @@ test('callback maps only approved GitHub fields to the identity dependency', asy
     clientId: 'id', clientSecret: 'secret', fetch: async () => responses.shift()!,
     upsertUser: async (identity) => {
       received = identity;
-      return { ...identity, id: 'user-id', role: 'member', bio: null, links: [], deletedAt: null, createdAt: new Date() } satisfies User;
+      return { ...identity, id: 'user-id', role: 'member', bio: null, links: [], suspendedAt: null, deletedAt: null, createdAt: new Date() } satisfies User;
     },
     createSession: async (userId) => fakeSession(userId),
   });

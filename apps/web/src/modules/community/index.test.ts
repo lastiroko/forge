@@ -278,6 +278,38 @@ test('rejects nonexistent and unsupported community targets without inserting ro
   });
 });
 
+test('rejects comments and reports for hidden community targets', async () => {
+  await withFixture(async ({ db, owner, ownerCookies, createSubmission }) => {
+    const submission = await createSubmission(owner.id, 'successful', 91);
+    const solution = await publish(submission, 'Hidden solution', 'Hidden writeup', ownerCookies, databaseUrl);
+    const visibleComment = await comment(
+      { type: 'solution', id: solution.id },
+      'Visible before moderation',
+      ownerCookies,
+      databaseUrl,
+    );
+
+    await db.update(solutions).set({ hiddenAt: new Date() }).where(eq(solutions.id, solution.id));
+    await assert.rejects(
+      () => comment({ type: 'solution', id: solution.id }, 'Should not be inserted', ownerCookies, databaseUrl),
+      /no solution/,
+    );
+    await assert.rejects(
+      () => report({ type: 'solution', id: solution.id }, 'Should not be inserted', ownerCookies, databaseUrl),
+      /no solution/,
+    );
+
+    await db.update(comments).set({ hiddenAt: new Date() }).where(eq(comments.id, visibleComment.id));
+    await assert.rejects(
+      () => report({ type: 'comment', id: visibleComment.id }, 'Should not be inserted', ownerCookies, databaseUrl),
+      /no comment/,
+    );
+
+    assert.equal((await db.select().from(comments)).filter((row) => row.body === 'Should not be inserted').length, 0);
+    assert.equal((await db.select().from(reports)).filter((row) => row.reason === 'Should not be inserted').length, 0);
+  });
+});
+
 test('lists only comments for the exact target in created-at and id order', async () => {
   await withFixture(async ({ db, owner, challengeId }) => {
     const firstId = '00000000-0000-4000-8000-000000000001';

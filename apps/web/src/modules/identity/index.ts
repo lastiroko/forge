@@ -371,7 +371,7 @@ export async function requireRole(
   databaseUrl: string = loadEnv().DATABASE_URL,
 ): Promise<User> {
   const user = await getCurrentUser(cookieStore, databaseUrl);
-  if (!user || !isRole(user.role) || roleRank[user.role] < roleRank[role]) {
+  if (!user || user.suspendedAt || !isRole(user.role) || roleRank[user.role] < roleRank[role]) {
     throw new AuthorizationError();
   }
   return user;

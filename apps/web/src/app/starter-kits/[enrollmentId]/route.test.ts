@@ -6,7 +6,7 @@ import { createGetHandler } from './handler.js';
 
 const owner = {
   id: 'member-1', githubId: 1, handle: 'member', displayName: 'Member', avatarUrl: null,
-  email: 'member@example.com', role: 'member', bio: null, links: [], deletedAt: null, createdAt: new Date('2025-01-01T00:00:00Z'),
+  email: 'member@example.com', role: 'member', bio: null, links: [], suspendedAt: null, deletedAt: null, createdAt: new Date('2025-01-01T00:00:00Z'),
 } satisfies User;
 
 const activeEnrollment = {

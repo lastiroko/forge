@@ -169,6 +169,13 @@
       "when": 1788480700000,
       "tag": "0023_add_user_deletion_state",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788480800000,
+      "tag": "0024_content_moderation",
+      "breakpoints": true
     }
   ]
 }
