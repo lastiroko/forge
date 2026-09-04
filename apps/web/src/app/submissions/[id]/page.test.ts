@@ -14,7 +14,7 @@ const { db, pool } = createDbClient(databaseUrl);
 const userId = randomUUID();
 const user = {
   id: userId, githubId: 51, handle: 'page-owner', displayName: 'Page Owner', avatarUrl: null,
-  email: 'page@example.com', role: 'member', bio: null, links: [], suspendedAt: null, createdAt: new Date(),
+  email: 'page@example.com', role: 'member', bio: null, links: [], suspendedAt: null, deletedAt: null, createdAt: new Date(),
 } satisfies User;
 let enrollmentId: string;
 let submissionId: string;

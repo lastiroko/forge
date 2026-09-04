@@ -50,3 +50,7 @@ export async function deleteAccountAction(
 
   redirect('/');
 }
+
+export async function submitDeleteAccountAction(formData: FormData): Promise<void> {
+  await deleteAccountAction(formData);
+}
