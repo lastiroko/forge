@@ -330,7 +330,7 @@ export async function previewStarterKits(
 export async function createZipArchive(files: Record<string, string>): Promise<Buffer> {
   const zip = new JSZip();
   for (const [filePath, content] of Object.entries(files)) {
-    zip.file(filePath, content);
+    zip.file(filePath, content, { createFolders: false });
   }
   return zip.generateAsync({ type: 'nodebuffer' });
 }

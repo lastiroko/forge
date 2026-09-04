@@ -1,4 +1,4 @@
-import { deleteAccountAction } from './delete-account.js';
+import { submitDeleteAccountAction } from './delete-account.js';
 
 export function DangerZone() {
   return (
@@ -11,7 +11,7 @@ export function DangerZone() {
       </p>
       <p>Download a copy of your data first if you want to keep it.</p>
       <a href="/account/export" download>Download account data</a>
-      <form action={deleteAccountAction}>
+      <form action={submitDeleteAccountAction}>
         <label>
           <input type="checkbox" name="confirmDeletion" required />
           I understand this permanently deletes my account.
