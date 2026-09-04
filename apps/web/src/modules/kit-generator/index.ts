@@ -6,6 +6,7 @@ import { loadEnv, validateChallengeContent } from '@forge/shared';
 import { requireRole, type SessionCookieReader } from '../identity/index.js';
 import {
   getDraftVersionForPreview,
+  type Challenge,
   type Stack,
 } from '../catalogue/index.js';
 
@@ -232,6 +233,30 @@ function loadStackTemplate(templateKey: string): { template: StackTemplate; ciWo
     },
     ciWorkflowYaml: readFileSync(resolveWithin(templateDir, manifest.ciWorkflow), 'utf8'),
   };
+}
+
+export function generateStarterKit(
+  challenge: Pick<Challenge, 'id' | 'contentSlug'>,
+  stack: Pick<Stack, 'id' | 'templateKey'>,
+  mode: Mode,
+): Record<string, string> {
+  if (!challenge.contentSlug) {
+    throw new Error(`Kit-generator module: challenge "${challenge.id}" has no content slug configured`);
+  }
+  if (!stack.templateKey) {
+    throw new Error(`Kit-generator module: stack "${stack.id}" has no template key configured`);
+  }
+
+  const { enabledModes, enabledStacks, version: baseVersion } = loadChallengeContent(challenge.contentSlug);
+  if (!enabledModes.includes(mode)) {
+    throw new Error(`Kit-generator module: mode "${mode}" is not enabled by challenge.yml for "${challenge.contentSlug}"`);
+  }
+  if (!enabledStacks.includes(stack.templateKey)) {
+    throw new Error(`Kit-generator module: stack template "${stack.templateKey}" is not enabled by challenge.yml for "${challenge.contentSlug}"`);
+  }
+
+  const { template, ciWorkflowYaml } = loadStackTemplate(stack.templateKey);
+  return generateKit({ ...baseVersion, ciWorkflowYaml }, template, mode);
 }
 
 export interface StarterKitPreviewSection {
