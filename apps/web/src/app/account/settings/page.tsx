@@ -5,6 +5,7 @@ import {
   preferences,
 } from '../../../modules/notifications/index.js';
 import { saveNotificationPreferencesAction } from './actions.js';
+import { DangerZone } from './DangerZone.js';
 
 export default async function Page() {
   const user = await requireRole('member', cookies());
@@ -32,6 +33,7 @@ export default async function Page() {
         <p>Download a copy of your profile, enrollments, submissions, and grading reports.</p>
         <a href="/account/export" download>Download account data</a>
       </section>
+      <DangerZone />
     </main>
   );
 }
