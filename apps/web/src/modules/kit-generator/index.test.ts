@@ -3,8 +3,17 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import JSZip from 'jszip';
 
-import { generateKit, type ChallengeVersion, type StackTemplate } from './index.js';
+import {
+  createZipArchive,
+  deliverStarterKit,
+  generateKit,
+  type ChallengeVersion,
+  type GitHubRepositoryClient,
+  type StackTemplate,
+  type ZipStorage,
+} from './index.js';
 
 const templatesRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -81,4 +90,74 @@ test('generateKit filters endpoints and checks by mode', () => {
   assert.equal(files['app/routes/adminPanel.py'], undefined);
   assert.ok(files['app/routes/listItems.py']);
   assert.ok(files['app/routes/createItem.py']);
+});
+
+test('createZipArchive produces a zip whose entries match the generated kit exactly', async () => {
+  const stack = buildStackFixture();
+  const version = buildVersionFixture();
+  const files = generateKit(version, stack, 'backend');
+
+  const zipBuffer = await createZipArchive(files);
+  const zip = await JSZip.loadAsync(zipBuffer);
+
+  assert.deepEqual(Object.keys(zip.files).sort(), Object.keys(files).sort());
+  for (const [filePath, content] of Object.entries(files)) {
+    const entry = zip.file(filePath);
+    assert.ok(entry, `expected zip entry for ${filePath}`);
+    assert.equal(await entry.async('string'), content);
+  }
+});
+
+test('deliverStarterKit returns the GitHub repository URL when creation succeeds', async () => {
+  const files = { 'README.md': 'hello' };
+  const githubClient: GitHubRepositoryClient = {
+    async createRepository() {
+      return 'https://github.com/example/starter-kit';
+    },
+  };
+  const zipStorage: ZipStorage = {
+    async upload() {
+      throw new Error('zipStorage.upload should not be called when GitHub succeeds');
+    },
+  };
+
+  const result = await deliverStarterKit('enrollment-1', files, githubClient, zipStorage);
+
+  assert.deepEqual(result, { repoUrl: 'https://github.com/example/starter-kit', downloadUrl: null });
+});
+
+test('deliverStarterKit falls back to uploading the identical file map when GitHub creation fails', async () => {
+  const stack = buildStackFixture();
+  const version = buildVersionFixture();
+  const files = generateKit(version, stack, 'backend');
+
+  const githubClient: GitHubRepositoryClient = {
+    async createRepository() {
+      throw new Error('GitHub is unavailable');
+    },
+  };
+
+  let uploadedKey: string | undefined;
+  let uploadedZip: Buffer | undefined;
+  const zipStorage: ZipStorage = {
+    async upload(key, zip) {
+      uploadedKey = key;
+      uploadedZip = zip;
+      return 'https://storage.example.com/starter-kits/enrollment-1.zip';
+    },
+  };
+
+  const result = await deliverStarterKit('enrollment-1', files, githubClient, zipStorage);
+
+  assert.deepEqual(result, { repoUrl: null, downloadUrl: 'https://storage.example.com/starter-kits/enrollment-1.zip' });
+  assert.equal(uploadedKey, 'starter-kits/enrollment-1.zip');
+  assert.ok(uploadedZip);
+
+  const uploadedFiles = await JSZip.loadAsync(uploadedZip);
+  assert.deepEqual(Object.keys(uploadedFiles.files).sort(), Object.keys(files).sort());
+  for (const [filePath, content] of Object.entries(files)) {
+    const entry = uploadedFiles.file(filePath);
+    assert.ok(entry, `expected zip entry for ${filePath}`);
+    assert.equal(await entry.async('string'), content);
+  }
 });

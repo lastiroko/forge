@@ -7,6 +7,8 @@ import {
   type OpenApiSchemaShape,
 } from '../../../modules/catalogue/index.js';
 import { getCurrentUser } from '../../../modules/identity/index.js';
+import { listComments } from '../../../modules/community/index.js';
+import { Comments } from '../../Comments.js';
 import { StartChallengeFlow } from './StartChallengeFlow.js';
 
 export const revalidate = 60;
@@ -41,13 +43,9 @@ export default async function ChallengePage({ params }: { params: { id: string }
   const enabledStacks = await getEnabledStacks(params.id);
   const contract = await loadOpenApiContract(version.openapiRef);
 
-  let user;
-  try {
-    user = await getCurrentUser();
-  } catch {
-    // identity.getCurrentUser is an unimplemented skeleton that always throws, so treat this as signed out for now.
-    user = undefined;
-  }
+  const user = await getCurrentUser();
+  const target = { type: 'challenge' as const, id: challenge.id };
+  const initialComments = await listComments(target);
 
   return (
     <main>
@@ -132,6 +130,7 @@ export default async function ChallengePage({ params }: { params: { id: string }
           }))}
         />
       ) : <p>Sign in with GitHub to start this challenge.</p>}
+      <Comments target={target} initialComments={initialComments} isSignedIn={Boolean(user)} />
     </main>
   );
 }

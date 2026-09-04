@@ -1,9 +1,18 @@
+const path = require('path');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  outputFileTracingRoot: path.join(__dirname, '..', '..'),
   experimental: {
     instrumentationHook: true,
     serverComponentsExternalPackages: ['pg-boss'],
+    outputFileTracingIncludes: {
+      '/author/challenges/[challengeId]/versions/[version]/preview': [
+        '../../challenges/**/*',
+        '../../templates/**/*',
+      ],
+    },
   },
   eslint: {
     ignoreDuringBuilds: true,

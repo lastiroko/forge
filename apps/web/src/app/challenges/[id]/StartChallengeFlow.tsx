@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import type { Enrollment } from '../../../modules/enrollment/index.js';
-import { startChallengeAction } from './actions.js';
+import type { StartChallengeResult } from '../../../modules/enrollment/index.js';
+import { attachRepositoryUrlAction, startChallengeAction } from './actions.js';
 import { getEnabledCombinations, type StackOption } from './enabled-combinations.js';
 
 interface StartChallengeFlowProps {
@@ -23,9 +23,13 @@ export function StartChallengeFlow({
   const [combinations] = useState(() => getEnabledCombinations({ backendEnabled, fullstackEnabled }, stacks));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
+  const [startResult, setStartResult] = useState<StartChallengeResult | null>(null);
+  const [attachedRepoUrl, setAttachedRepoUrl] = useState<string | null>(null);
+  const [repoUrlInput, setRepoUrlInput] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isAttaching, startAttachTransition] = useTransition();
 
   if (combinations.length === 0) {
     return <p>No stacks are enabled for this challenge yet.</p>;
@@ -36,16 +40,33 @@ export function StartChallengeFlow({
     setError(null);
     startTransition(() => {
       startChallengeAction(userId, challengeId, combination.mode, combination.stack.id)
-        .then(setEnrollment)
+        .then(setStartResult)
         .catch(() => setError('Unable to start this challenge. Please try again.'));
     });
   }
 
-  if (enrollment) {
-    if (enrollment.repoUrl) {
+  function submitRepositoryUrl(enrollmentId: string) {
+    setAttachError(null);
+    startAttachTransition(() => {
+      attachRepositoryUrlAction(enrollmentId, repoUrlInput)
+        .then((updated) => {
+          if (updated?.repoUrl) {
+            setAttachedRepoUrl(updated.repoUrl);
+          } else {
+            setAttachError('Unable to save that repository URL. Please try again.');
+          }
+        })
+        .catch(() => setAttachError('Enter a valid https://github.com/<owner>/<repo> URL.'));
+    });
+  }
+
+  if (startResult) {
+    const repoUrl = attachedRepoUrl ?? startResult.repoUrl;
+
+    if (repoUrl) {
       return (
         <section>
-          <a href={enrollment.repoUrl}>Open your challenge repository</a>
+          <a href={repoUrl}>Open your challenge repository</a>
           <ol>
             <li>Clone the repository.</li>
             <li>Run it locally per the README.</li>
@@ -54,7 +75,36 @@ export function StartChallengeFlow({
         </section>
       );
     }
-    return <p>Your starter files are being prepared. This enrollment is saved as {enrollment.id}.</p>;
+
+    if (startResult.downloadUrl) {
+      return (
+        <section>
+          <a href={startResult.downloadUrl}>Download starter kit</a>
+          <ol>
+            <li>Download and unzip the starter kit.</li>
+            <li>Create a new GitHub repository and push these files to it.</li>
+            <li>Paste the repository URL below once it is ready.</li>
+          </ol>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitRepositoryUrl(startResult.enrollment.id);
+            }}
+          >
+            <input
+              type="url"
+              value={repoUrlInput}
+              onChange={(event) => setRepoUrlInput(event.target.value)}
+              placeholder="https://github.com/you/your-repo"
+            />
+            <button type="submit" disabled={isAttaching}>Save repository URL</button>
+          </form>
+          {attachError ? <p>{attachError}</p> : null}
+        </section>
+      );
+    }
+
+    return <p>Your starter files are being prepared. This enrollment is saved as {startResult.enrollment.id}.</p>;
   }
 
   return (

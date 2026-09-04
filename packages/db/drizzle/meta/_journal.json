@@ -127,6 +127,55 @@
       "when": 1788480100000,
       "tag": "0017_unique_users_github_id",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788480200000,
+      "tag": "0018_best_grading_run_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788480300000,
+      "tag": "0019_add_user_profile_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788480400000,
+      "tag": "0020_add_catalogue_content_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788480500000,
+      "tag": "0021_worker_heartbeats",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788480600000,
+      "tag": "0022_add_grading_run_queue_job_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788480700000,
+      "tag": "0023_add_user_deletion_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788480800000,
+      "tag": "0024_content_moderation",
+      "breakpoints": true
     }
   ]
 }

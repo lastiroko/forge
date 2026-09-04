@@ -13,7 +13,7 @@ export interface GradingJob {
 }
 
 export type PipelineStageResult =
-  | { outcome: 'passed'; score?: number; reportUrl?: string }
+  | { outcome: 'passed'; score?: number; reportUrl?: string | null; buildLogUrl?: string | null; appLogUrl?: string | null }
   | { outcome: 'member-failure'; message: string };
 
 export interface PipelineStage {
@@ -33,8 +33,8 @@ export interface StageStatusUpdate {
 
 export type UpdateStatus = (update: StageStatusUpdate) => Promise<void> | void;
 export type PipelineResult =
-  | { outcome: 'successful'; score: number; reportUrl: string | null }
-  | { outcome: 'member-failure'; score: number; reportUrl: null; message: string };
+  | { outcome: 'successful'; score: number; reportUrl: string | null; buildLogUrl: string | null; appLogUrl: string | null }
+  | { outcome: 'member-failure'; score: number; reportUrl: null; buildLogUrl: null; appLogUrl: null; message: string };
 export type CompletePipeline = (job: GradingJob, result: PipelineResult) => Promise<void> | void;
 
 export async function runPipeline(
@@ -45,6 +45,8 @@ export async function runPipeline(
 ): Promise<PipelineResult> {
   let score = 0;
   let reportUrl: string | null = null;
+  let buildLogUrl: string | null = null;
+  let appLogUrl: string | null = null;
   for (const stage of stages) {
     await updateStatus({ runId: job.data.runId, submissionId: job.data.submissionId, stage: stage.name, status: 'started' });
 
@@ -70,16 +72,18 @@ export async function runPipeline(
         status: 'member-failure',
         message: result.message,
       });
-      const terminal = { outcome: 'member-failure' as const, score: 0, reportUrl: null, message: result.message };
+      const terminal = { outcome: 'member-failure' as const, score: 0, reportUrl: null, buildLogUrl: null, appLogUrl: null, message: result.message };
       await complete(job, terminal);
       return terminal;
     }
 
     if (typeof result.score === 'number') score = result.score;
-    if (result.reportUrl) reportUrl = result.reportUrl;
+    if (result.reportUrl !== undefined) reportUrl = result.reportUrl;
+    if (result.buildLogUrl !== undefined) buildLogUrl = result.buildLogUrl;
+    if (result.appLogUrl !== undefined) appLogUrl = result.appLogUrl;
     await updateStatus({ runId: job.data.runId, submissionId: job.data.submissionId, stage: stage.name, status: 'passed' });
   }
-  const terminal = { outcome: 'successful' as const, score, reportUrl };
+  const terminal = { outcome: 'successful' as const, score, reportUrl, buildLogUrl, appLogUrl };
   await complete(job, terminal);
   return terminal;
 }

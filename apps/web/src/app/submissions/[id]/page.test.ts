@@ -14,7 +14,7 @@ const { db, pool } = createDbClient(databaseUrl);
 const userId = randomUUID();
 const user = {
   id: userId, githubId: 51, handle: 'page-owner', displayName: 'Page Owner', avatarUrl: null,
-  email: 'page@example.com', role: 'member', createdAt: new Date(),
+  email: 'page@example.com', role: 'member', bio: null, links: [], suspendedAt: null, deletedAt: null, createdAt: new Date(),
 } satisfies User;
 let enrollmentId: string;
 let submissionId: string;
@@ -58,6 +58,15 @@ test('submission page renders queued, running, and completed durable states', as
   assert.match(completed, /https:\/\/reports\.example\/run/);
 });
 
+test('submission page renders the cancelled terminal state without a score', async () => {
+  await db.update(gradingRuns).set({
+    status: 'cancelled', score: null, currentStage: 'functional', updatedAt: new Date(),
+  }).where(eq(gradingRuns.id, runId));
+  const cancelled = await renderPage();
+  assert.match(cancelled, /Cancelled/);
+  assert.doesNotMatch(cancelled, /Score:/);
+});
+
 test('submission page rejects a user who does not own the enrollment', async () => {
   await assert.rejects(
     () => renderSubmissionPage(submissionId, { ...user, id: randomUUID() }),
@@ -97,4 +106,33 @@ test('live status subscription targets this submission and applies stage and sco
   assert.equal(closeCalls, 1);
   unsubscribe();
   assert.equal(closeCalls, 2);
+});
+
+test('live status subscription closes the EventSource when a cancelled event arrives', () => {
+  let listener: ((event: Event) => void) | undefined;
+  let closeCalls = 0;
+  const received: Array<{ currentStage: string | null; score: number | null; status: string }> = [];
+  const source = {
+    onerror: null as ((event: Event) => void) | null,
+    addEventListener(type: string, next: (event: Event) => void) {
+      assert.equal(type, 'status');
+      listener = next;
+    },
+    close() { closeCalls += 1; },
+  };
+  subscribeToSubmissionStatus(
+    submissionId,
+    (status) => received.push(status),
+    () => assert.fail('unexpected EventSource error'),
+    () => source,
+  );
+
+  listener!({ data: JSON.stringify({ currentStage: 'build', score: null, status: 'running' }) } as MessageEvent<string>);
+  assert.equal(closeCalls, 0);
+  listener!({ data: JSON.stringify({ currentStage: 'build', score: null, status: 'cancelled' }) } as MessageEvent<string>);
+  assert.deepEqual(received, [
+    { currentStage: 'build', score: null, status: 'running' },
+    { currentStage: 'build', score: null, status: 'cancelled' },
+  ]);
+  assert.equal(closeCalls, 1);
 });

@@ -1,4 +1,4 @@
-import { and, desc, eq, gte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
 import { loadEnv } from '@forge/shared';
 import { enqueue } from '../grading/index.js';
@@ -25,6 +25,22 @@ export class RateLimitExceededError extends Error {
 }
 
 export type Submission = typeof submissions.$inferSelect;
+
+export async function listAccountExportSubmissions(
+  userId: string,
+  databaseUrl: string = loadEnv().DATABASE_URL,
+): Promise<Submission[]> {
+  const { db, pool } = createDbClient(databaseUrl);
+  try {
+    const rows = await db.select({ submission: submissions }).from(submissions)
+      .innerJoin(enrollments, eq(submissions.enrollmentId, enrollments.id))
+      .where(eq(enrollments.userId, userId))
+      .orderBy(asc(submissions.createdAt), asc(submissions.id));
+    return rows.map((row) => row.submission);
+  } finally {
+    await pool.end();
+  }
+}
 
 // NOTE: the pre-existing submit(enrollment: SubmissionEnrollment, sha?: string) from ticket #32
 // resolved a mocked default-branch head SHA when no sha was given. Ticket #34's rate-limit check
@@ -119,7 +135,7 @@ export async function getLatestGradingStatus(
   }
 }
 
-const TERMINAL_GRADING_STATUSES = new Set(['successful', 'failed']);
+const TERMINAL_GRADING_STATUSES = new Set(['successful', 'failed', 'cancelled']);
 
 export async function* streamStatus(
   submissionId: string,
