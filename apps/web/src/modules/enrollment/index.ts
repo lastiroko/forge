@@ -6,6 +6,7 @@ import {
   getEnabledStacks,
   getLatestPublishedVersion,
 } from '../catalogue/index.js';
+import { generateStarterKit } from '../kit-generator/index.js';
 
 const { enrollments, challengeVersions, submissions, gradingRuns } = schema;
 
@@ -95,17 +96,24 @@ export class InvalidCombinationError extends Error {
   }
 }
 
+export interface GitHubClient {
+  createRepository(input: { name: string; visibility: 'private' }): Promise<{ repoUrl: string }>;
+  pushFiles(input: { repoUrl: string; files: Record<string, string> }): Promise<void>;
+}
+
 export async function startChallenge(
   userId: string,
   challengeId: string,
   mode: 'backend' | 'fullstack',
   stackId: string,
   databaseUrl: string = loadEnv().DATABASE_URL,
+  githubClient?: GitHubClient,
 ): Promise<Enrollment> {
   const challenge = await getChallenge(challengeId, databaseUrl);
   const modeEnabled = mode === 'backend' ? challenge?.backendEnabled : challenge?.fullstackEnabled;
   const enabledStacks = challenge ? await getEnabledStacks(challengeId, databaseUrl) : [];
-  if (!challenge || !modeEnabled || !enabledStacks.some((stack) => stack.id === stackId)) {
+  const stack = enabledStacks.find((candidate) => candidate.id === stackId);
+  if (!challenge || !modeEnabled || !stack) {
     throw new InvalidCombinationError();
   }
 
@@ -136,9 +144,32 @@ export async function startChallenge(
       mode,
       stackId,
       repoUrl: null,
-      status: 'active',
+      status: 'pending',
     }).returning();
-    return inserted;
+
+    if (!githubClient) {
+      // TODO: Remove this compatibility path once the challenge action can supply an
+      // authenticated GitHub App client. The schema currently stores neither an
+      // installation ID nor a user access token, so the server action cannot safely
+      // construct the provider adapter yet.
+      const [active] = await db.update(enrollments).set({
+        status: 'active',
+      }).where(eq(enrollments.id, inserted.id)).returning();
+      return active;
+    }
+
+    const files = generateStarterKit(challenge, stack, mode);
+    const repository = await githubClient.createRepository({
+      name: challenge.contentSlug as string,
+      visibility: 'private',
+    });
+    await githubClient.pushFiles({ repoUrl: repository.repoUrl, files });
+
+    const [active] = await db.update(enrollments).set({
+      repoUrl: repository.repoUrl,
+      status: 'active',
+    }).where(eq(enrollments.id, inserted.id)).returning();
+    return active;
   } finally {
     await pool.end();
   }

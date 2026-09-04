@@ -3,7 +3,8 @@ import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { createDbClient, schema } from '@forge/db';
-import { abandon, getEnrollment, getEnrollmentHistory, InvalidCombinationError, startChallenge } from './index.js';
+import { generateStarterKit } from '../kit-generator/index.js';
+import { abandon, getEnrollment, getEnrollmentHistory, type GitHubClient, InvalidCombinationError, startChallenge } from './index.js';
 
 const { users, challenges, challengeVersions, stacks, challengeStacks, enrollments, submissions, gradingRuns } = schema;
 const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
@@ -18,17 +19,31 @@ let disabledStackId: string;
 let enrollmentId: string;
 const versionIds: string[] = [];
 const challengeStackIds: string[] = [];
+const repositoryUrl = 'https://github.com/enrollment-test/todo-api';
+const createCalls: Array<{ name: string; visibility: 'private' }> = [];
+const pushCalls: Array<{ repoUrl: string; files: Record<string, string> }> = [];
+const githubClient: GitHubClient = {
+  async createRepository(input) {
+    createCalls.push(input);
+    return { repoUrl: repositoryUrl };
+  },
+  async pushFiles(input) {
+    const rows = await db.select().from(enrollments).where(eq(enrollments.userId, userId));
+    assert.ok(rows.some((enrollment) => enrollment.status === 'pending'));
+    pushCalls.push(input);
+  },
+};
 
 before(async () => {
   const [user] = await db.insert(users).values({
     githubId: Date.now(), handle: `enrollment-${Date.now()}`, displayName: 'Enrollment Test', email: `enrollment-${Date.now()}@example.com`, role: 'member',
   }).returning();
   userId = user.id;
-  const [challenge] = await db.insert(challenges).values({ title: 'Enrollment challenge', level: 'junior', backendEnabled: true, fullstackEnabled: false }).returning();
+  const [challenge] = await db.insert(challenges).values({ title: 'Enrollment challenge', level: 'junior', backendEnabled: true, fullstackEnabled: false, contentSlug: 'todo-api' }).returning();
   challengeId = challenge.id;
   const [disabledModeChallenge] = await db.insert(challenges).values({ title: 'Disabled mode challenge', level: 'junior', backendEnabled: true, fullstackEnabled: false }).returning();
   disabledModeChallengeId = disabledModeChallenge.id;
-  const [enabledStack] = await db.insert(stacks).values({ language: 'TypeScript', framework: 'Express' }).returning();
+  const [enabledStack] = await db.insert(stacks).values({ language: 'Python', framework: 'FastAPI', templateKey: 'python-fastapi' }).returning();
   enabledStackId = enabledStack.id;
   const [disabledStack] = await db.insert(stacks).values({ language: 'Go', framework: 'Fiber' }).returning();
   disabledStackId = disabledStack.id;
@@ -61,11 +76,37 @@ after(async () => {
 });
 
 test('startChallenge creates an active enrollment for the latest published version', async () => {
-  const result = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl);
+  const result = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl, githubClient);
   enrollmentId = result.id;
   assert.equal(result.challengeVersionId, latestVersionId);
   assert.equal(result.status, 'active');
-  assert.equal(result.repoUrl, null);
+  assert.equal(result.repoUrl, repositoryUrl);
+  assert.deepEqual(createCalls, [{ name: 'todo-api', visibility: 'private' }]);
+  assert.equal(pushCalls.length, 1);
+  assert.equal(pushCalls[0].repoUrl, repositoryUrl);
+
+  const [challenge] = await db.select().from(challenges).where(eq(challenges.id, challengeId));
+  const [stack] = await db.select().from(stacks).where(eq(stacks.id, enabledStackId));
+  assert.deepEqual(pushCalls[0].files, generateStarterKit(challenge, stack, 'backend'));
+  assert.deepEqual(Object.keys(pushCalls[0].files).sort(), [
+    '.github/workflows/checks.yml',
+    'Dockerfile',
+    'README.md',
+    'app/routes/deleteItemsById.py',
+    'app/routes/getHealth.py',
+    'app/routes/getItems.py',
+    'app/routes/getItemsById.py',
+    'app/routes/patchItemsById.py',
+    'app/routes/postItems.py',
+    'challenge.yml',
+    'checks/functional-public.json',
+    'docker-compose.yml',
+    'openapi.yaml',
+  ]);
+
+  const [persisted] = await db.select().from(enrollments).where(eq(enrollments.id, result.id));
+  assert.equal(persisted.repoUrl, repositoryUrl);
+  assert.equal(persisted.status, 'active');
 });
 
 test('startChallenge rejects a stack not enabled for the challenge', async () => {
@@ -83,10 +124,13 @@ test('startChallenge rejects a mode not enabled for the challenge', async () => 
 });
 
 test('startChallenge reuses the active enrollment for the user and challenge', async () => {
-  const first = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl);
-  const second = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl);
+  const callsBefore = { create: createCalls.length, push: pushCalls.length };
+  const first = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl, githubClient);
+  const second = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl, githubClient);
   enrollmentId = first.id;
   assert.equal(second.id, first.id);
+  assert.equal(createCalls.length, callsBefore.create);
+  assert.equal(pushCalls.length, callsBefore.push);
 });
 
 test('getEnrollment returns a row by id and undefined for an unknown id', async () => {
@@ -102,10 +146,14 @@ test('abandon marks the active enrollment as abandoned', async () => {
   assert.equal(result?.status, 'abandoned');
 });
 
-test('startChallenge creates a new enrollment after the previous one was abandoned', async () => {
+test('startChallenge keeps the existing action path functional without a configured GitHub client', async () => {
+  const callsBefore = { create: createCalls.length, push: pushCalls.length };
   const result = await startChallenge(userId, challengeId, 'backend', enabledStackId, databaseUrl);
   assert.notEqual(result.id, enrollmentId);
   assert.equal(result.status, 'active');
+  assert.equal(result.repoUrl, null);
+  assert.equal(createCalls.length, callsBefore.create);
+  assert.equal(pushCalls.length, callsBefore.push);
   enrollmentId = result.id;
 });
 
