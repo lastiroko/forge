@@ -82,15 +82,16 @@ test('S36: the app container runs under the hardened sandbox policy', async (t) 
     'inspect',
     result.appContainerId,
     '--format',
-    '{{.HostConfig.Runtime}}|{{.Config.User}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.Privileged}}|{{json .HostConfig.CapAdd}}|{{json .HostConfig.Binds}}|{{.HostConfig.PidsLimit}}',
+    '{{.HostConfig.Runtime}}|{{.Config.User}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.Privileged}}|{{json .HostConfig.CapAdd}}|{{json .HostConfig.Binds}}|{{json .HostConfig.Tmpfs}}|{{.HostConfig.PidsLimit}}',
   ]);
 
-  const [runtime, user, readonlyRootfs, privileged, capAdd, binds, pidsLimit] = stdout.trim().split('|');
+  const [runtime, user, readonlyRootfs, privileged, capAdd, binds, tmpfs, pidsLimit] = stdout.trim().split('|');
   assert.equal(runtime, 'runsc');
   assert.equal(user, '65532:65532');
   assert.equal(readonlyRootfs, 'true');
   assert.equal(privileged, 'false');
   assert.deepEqual(JSON.parse(capAdd) ?? [], []);
   assert.deepEqual(JSON.parse(binds) ?? [], []);
+  assert.ok('/tmp' in (JSON.parse(tmpfs) ?? {}));
   assert.equal(pidsLimit, '128');
 });

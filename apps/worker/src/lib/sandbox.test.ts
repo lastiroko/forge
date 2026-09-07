@@ -19,6 +19,7 @@ for (const [level, limits] of Object.entries(LEVEL_LIMITS) as [Challenge['level'
     assert.equal(options.HostConfig.Privileged, false);
     assert.deepEqual(options.HostConfig.CapAdd, []);
     assert.deepEqual(options.HostConfig.Binds, []);
+    assert.deepEqual(options.HostConfig.Tmpfs, ['/tmp:rw,noexec,nosuid,nodev']);
     assert.ok(options.HostConfig.PidsLimit > 0);
     assert.equal(options.HostConfig.PidsLimit, limits.pidsLimit);
     assert.equal(options.HostConfig.StorageOpt.size, limits.diskSize);

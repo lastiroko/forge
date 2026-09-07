@@ -8,6 +8,7 @@ export interface SandboxRunOptions {
     Privileged: boolean;
     CapAdd: string[];
     Binds: string[];
+    Tmpfs: string[];
     PidsLimit: number;
     StorageOpt: { size: string };
   };
@@ -29,6 +30,7 @@ export function createSandboxRunOptions(level: Challenge['level']): SandboxRunOp
       Privileged: false,
       CapAdd: [],
       Binds: [],
+      Tmpfs: ['/tmp:rw,noexec,nosuid,nodev'],
       PidsLimit: limits.pidsLimit,
       StorageOpt: { size: limits.diskSize },
     },
